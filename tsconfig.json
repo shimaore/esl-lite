@@ -1,0 +1,24 @@
+{
+  "extends": [
+    "@tsconfig/strictest/tsconfig.json",
+    "@tsconfig/node21/tsconfig.json"
+  ],
+  "compilerOptions": {
+    "lib": ["esnext"],
+    "target": "esnext",
+    "module": "nodenext",
+    "moduleResolution": "NodeNext",
+    "sourceMap": true,
+    "declarationMap": true,
+    "allowSyntheticDefaultImports": true,
+    "outDir": "build",
+    "rootDir": ".",
+    "baseUrl": ".",
+    "declaration": true,
+    "declarationDir": "./types",
+    "emitDeclarationOnly": false,
+    "composite": true,
+    "skipLibCheck": true
+  },
+  "exclude": ["build", "test-ts", "types", "esl-lite.mjs", "esl-lite.cjs"]
+}

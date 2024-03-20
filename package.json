@@ -1,0 +1,75 @@
+{
+  "name": "esl-lite",
+  "version": "1.0.0",
+  "description": "Client for FreeSwitch Event System",
+  "keywords": [
+    "freeswitch",
+    "event"
+  ],
+  "author": {
+    "name": "Stéphane Alnet",
+    "email": "stephane@shimaore.net"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://g.rie.re/shimaore/esl-lite.git"
+  },
+  "type": "module",
+  "module": "esl-lite.mjs",
+  "main": "esl-lite.cjs",
+  "types": "./types/src/esl-lite.d.ts",
+  "files": [
+    "esl-lite.cjs",
+    "esl-lite.mjs",
+    "./types/src/*.d.ts*"
+  ],
+  "exports": {
+    "require": "./esl-lite.cjs",
+    "import": "./esl-lite.mjs",
+    "types": "./types/src/esl-lite.d.ts"
+  },
+  "devDependencies": {
+    "@tsconfig/node21": "21.0.1",
+    "@tsconfig/strictest": "2.0.3",
+    "@types/eslint": "^8",
+    "@types/node": "20.11.30",
+    "@types/uuid": "^9",
+    "@typescript-eslint/eslint-plugin": "^7.3.1",
+    "ava": "^6.1.2",
+    "esbuild": "0.20.2",
+    "esl": "^11.1.1",
+    "eslint": "^8.57.0",
+    "eslint-config-standard-with-typescript": "^43.0.1",
+    "eslint-plugin-import": "^2.29.1",
+    "eslint-plugin-n": "^16.6.2",
+    "eslint-plugin-promise": "^6.1.1",
+    "nyc": "^15.1.0",
+    "prettier": "3.2.5",
+    "typescript": "5.4.2",
+    "uuid": "^9.0.1"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "prepublishOnly": "yarn install && yarn build && yarn syntax",
+    "prelint": "yarn syntax",
+    "lint": "eslint --fix src/**/*.ts && prettier -w .",
+    "pretest": "yarn prepublishOnly",
+    "test": "nyc ava -c 1 --fail-fast",
+    "test:optimize": "node --trace-deopt build/trace/benchmark.js | grep bailout",
+    "syntax": "tsc",
+    "test:live": "podman  build --ulimit nofile=1048576:1048576 -f test/Dockerfile ."
+  },
+  "publishConfig": {
+    "tag": "latest"
+  },
+  "usage": "Test with podman  build --ulimit nofile=1048576:1048576 -f test/Dockerfile .",
+  "packageManager": "yarn@4.1.1+sha256.f3cc0eda8e5560e529c7147565b30faa43b4e472d90e8634d7134a37c7f59781",
+  "dependencies": {
+    "ulidx": "2.3.0"
+  },
+  "prettier": {
+    "trailingComma": "es5",
+    "semi": false,
+    "singleQuote": true
+  }
+}
