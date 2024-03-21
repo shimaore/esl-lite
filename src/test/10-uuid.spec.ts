@@ -201,22 +201,16 @@ test('should handle errors', async function (t) {
   client.connect()
   const call = await onceConnected(client)
   await call.event_json(['ALL'])
-  const res = await call.bgapi(
-    `originate sofia/test-server/sip:answer-wait-30000@${domain} &park`,
+  const originationUUID = 'ABCD'
+  await call.bgapi(
+    `originate {origination_uuid=${originationUUID}}sofia/test-server/sip:answer-wait-30000@${domain} &park`,
     2000
   )
-  t.log(res)
-  const callUUID = res.body.uniqueID
-  t.is(typeof callUUID, 'string')
-  if (typeof callUUID !== 'string') {
-    client.end()
-    return
-  }
   const ref = process.hrtime.bigint()
   const p = (async () => {
     // parallel
     const res = await call.command_uuid(
-      callUUID,
+      originationUUID,
       'play_and_get_digits',
       '4 5 3 20000 # silence_stream://4000 silence_stream://4000 choice \\d 1000',
       4200
@@ -225,15 +219,13 @@ test('should handle errors', async function (t) {
     const duration = now - ref
     t.true(duration > 1000000000n)
     t.true(duration < 1200000000n)
-    t.like(res, {
-      body: {
-        'Answer-State': 'hangup',
-        'Hangup-Cause': 'NO_PICKUP',
-      },
+    t.like(res.body.data, {
+      'Answer-State': 'hangup',
+      'Hangup-Cause': 'NO_PICKUP',
     })
   })()
   await sleep(1000)
-  await call.hangup_uuid(callUUID, 'NO_PICKUP')
+  await call.hangup_uuid(originationUUID, 'NO_PICKUP')
   await sleep(500)
   client.end()
   await p

@@ -30,7 +30,7 @@ Reply-Text: +OK accepted
           if (data.match(/bridge[^]*foo/) != null) {
             await sleep(100)
             t.log('Server writing (execute-complete for bridge)')
-            const $ = data.match(/Event-UUID: (\S+)/)
+            const $ = data.match(/Event-UUID: (\S+)/i)
             if ($?.[1] != null) {
               const eventUUID = $[1]
               const msg = `Content-Type: text/event-plain
@@ -48,7 +48,7 @@ Application-UUID: ${eventUUID}
           if (data.match(/ping[^]*bar/) != null) {
             await sleep(100)
             t.log('Server writing (execute-complete for ping)')
-            const $ = data.match(/Event-UUID: (\S+)/)
+            const $ = data.match(/Event-UUID: (\S+)/i)
             if ($?.[1] != null) {
               const eventUUID = $[1]
               const msg = `
