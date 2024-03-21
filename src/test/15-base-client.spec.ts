@@ -109,7 +109,7 @@ test('15-base-client: should detect leg_progress_timeout', async function (t) {
     15000
   )
   client.end()
-  t.is(res.headers.replyText, '-ERR PROGRESS_TIMEOUT\n')
+  t.is(res.body.response, '-ERR PROGRESS_TIMEOUT\n')
 })
 
 test('15-base-client: should detect leg_timeout', async function (t) {
@@ -131,7 +131,7 @@ test('15-base-client: should detect leg_timeout', async function (t) {
     15000
   )
   client.end()
-  t.is(res.headers.replyText, '-ERR ALLOTTED_TIMEOUT\n')
+  t.is(res.body.response, '-ERR ALLOTTED_TIMEOUT\n')
 })
 
 test('15-base-client: should detect hangup', async function (t) {

@@ -391,23 +391,23 @@ const shouldDetect = function (code: string, pattern: RegExp) {
     }
     t.log('preparing')
     service.on('CHANNEL_CREATE', function (msg) {
-      t.like(msg.body, {
+      t.like(msg.body.data, {
         variable_tracer_uuid: id,
       })
     })
     service.on('CHANNEL_ORIGINATE', function (msg) {
-      t.like(msg.body, {
+      t.like(msg.body.data, {
         variable_tracer_uuid: id,
       })
     })
     service.once('CHANNEL_HANGUP', function (msg) {
-      t.like(msg.body, {
+      t.like(msg.body.data, {
         variable_tracer_uuid: id,
         variable_sip_term_status: code,
       })
     })
     service.on('CHANNEL_HANGUP_COMPLETE', function (msg) {
-      t.like(msg.body, {
+      t.like(msg.body.data, {
         variable_tracer_uuid: id,
         variable_sip_term_status: code,
         variable_billmsec: '0',
@@ -416,31 +416,15 @@ const shouldDetect = function (code: string, pattern: RegExp) {
     await service.filter('variable_tracer_uuid', id)
     await service.event_json(['ALL'])
     t.log(`sending call for ${code}`)
-    try {
-      await service.bgapi(
-        `originate {${optionsText(options)}}sofia/test-client/sip:wait-100-respond-${code}@${domain} &park`,
-        1000
-      )
-    } catch (error) {
-      if (
-        typeof error === 'object' &&
-        error != null &&
-        'args' in error &&
-        typeof error.args === 'object' &&
-        error.args != null &&
-        'command' in error.args &&
-        'reply' in error.args &&
-        typeof error.args.command === 'string' &&
-        typeof error.args.reply === 'string'
-      ) {
-        t.regex(error.args.reply, pattern)
-        t.true('res' in error)
-      } else {
-        t.fail('Missing args and/or args.command/args.reply')
-      }
-    }
-    await sleep(50)
+    const res = await service.bgapi(
+      `originate {${optionsText(options)}}sofia/test-client/sip:wait-100-respond-${code}@${domain} &park`,
+      1000
+    )
     client.end()
+    t.is(typeof res.body.response, 'string')
+    if (typeof res.body.response === 'string') {
+      t.regex(res.body.response, pattern)
+    }
   }
 }
 
