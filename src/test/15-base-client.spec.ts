@@ -14,7 +14,7 @@ import * as legacyESL from 'esl'
 import { v4 as uuidv4 } from 'uuid'
 
 import { second, sleep, timer, optionsText } from './tools.js'
-import { FreeSwitchClient, FreeSwitchError } from '../esl-lite.js'
+import { FreeSwitchClient } from '../esl-lite.js'
 
 const domain = '127.0.0.1:5062'
 
@@ -104,21 +104,12 @@ test('15-base-client: should detect leg_progress_timeout', async function (t) {
     leg_progress_timeout: 1,
     tracer_uuid: id,
   }
-  try {
-    t.log(id)
-    await service.bgapi(
-      `originate [${optionsText(options)}]sofia/test-client/sip:wait-15000-answer@${domain} &park`,
-      15000
-    )
-  } catch (err) {
-    if (err instanceof FreeSwitchError) {
-      t.is(err.res?.headers.replyText, '-ERR PROGRESS_TIMEOUT\n')
-    } else {
-      t.log(err)
-      t.fail()
-    }
-  }
+  const res = await service.bgapi(
+    `originate [${optionsText(options)}]sofia/test-client/sip:wait-15000-answer@${domain} &park`,
+    15000
+  )
   client.end()
+  t.is(res.headers.replyText, '-ERR PROGRESS_TIMEOUT\n')
 })
 
 test('15-base-client: should detect leg_timeout', async function (t) {
@@ -135,21 +126,12 @@ test('15-base-client: should detect leg_timeout', async function (t) {
     leg_timeout: 2,
     tracer_uuid: id,
   }
-  try {
-    t.log(id)
-    await service.bgapi(
-      `originate [${optionsText(options)}]sofia/test-client/sip:wait-15000-answer@${domain} &park`,
-      15000
-    )
-  } catch (err) {
-    if (err instanceof FreeSwitchError) {
-      t.is(err.res?.headers.replyText, '-ERR ALLOTTED_TIMEOUT\n')
-    } else {
-      t.log(err)
-      t.fail()
-    }
-  }
+  const res = await service.bgapi(
+    `originate [${optionsText(options)}]sofia/test-client/sip:wait-15000-answer@${domain} &park`,
+    15000
+  )
   client.end()
+  t.is(res.headers.replyText, '-ERR ALLOTTED_TIMEOUT\n')
 })
 
 test('15-base-client: should detect hangup', async function (t) {
@@ -167,7 +149,7 @@ test('15-base-client: should detect hangup', async function (t) {
   }
   const duration = timer()
   service.on('CHANNEL_HANGUP', function (msg) {
-    if (msg.body?.data['variable_tracer_uuid'] === id) {
+    if (msg.body.data['variable_tracer_uuid'] === id) {
       const d = duration()
       t.true(d > 14 * second)
       t.true(d < 16 * second)
