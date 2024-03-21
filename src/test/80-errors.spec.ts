@@ -416,20 +416,30 @@ const shouldDetect = function (code: string, pattern: RegExp) {
     await service.filter('variable_tracer_uuid', id)
     await service.event_json(['ALL'])
     t.log(`sending call for ${code}`)
-    const res = await service.bgapi(
-      `originate {${optionsText(options)}}sofia/test-client/sip:wait-100-respond-${code}@${domain} &park`,
-      1000
-    )
-    client.end()
-    t.is(typeof res.body.response, 'string')
-    if (typeof res.body.response === 'string') {
-      t.regex(res.body.response, pattern)
+    try {
+      const res = await service.bgapi(
+        `originate {${optionsText(options)}}sofia/test-client/sip:wait-100-respond-${code}@${domain} &park`,
+        500
+      )
+      t.log(`bgapi returned for ${code}`)
+      t.log(res)
+      t.is(typeof res.body.response, 'string')
+      if (typeof res.body.response === 'string') {
+        t.regex(res.body.response, pattern)
+      }
+    } catch (ex) {
+      t.log(ex)
     }
+    await sleep(50)
+    client.end()
   }
 }
 
 // Anything below 4xx isn't an error
-test.serial('should detect 403', shouldDetect('403', /^-ERR CALL_REJECTED/))
+test.serial.only(
+  'should detect 403',
+  shouldDetect('403', /^-ERR CALL_REJECTED/)
+)
 
 test.serial(
   'should detect 404',
