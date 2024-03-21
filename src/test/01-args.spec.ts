@@ -18,6 +18,6 @@ test('01-args: should throw properly on closed (bgapi)', async function (t) {
   T.closed = true
   await T.bgapi('foo', 1000).catch(function (error: any) {
     t.log(error)
-    return t.is(error.args.when, 'bgapi on closed socket')
+    return t.is(error.args.when, 'send on closed socket')
   })
 })

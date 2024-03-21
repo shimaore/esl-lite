@@ -15,54 +15,33 @@ export class FreeSwitchParserError extends Error {
 
 type Processor = (headers: Headers, body: Buffer) => void
 
-export const FreeSwitchParser = (
+export const FreeSwitchParser = async (
   socket: Socket,
   processMessage: Processor
-): void => {
+): Promise<void> => {
   let bodyLength: number = 0
   let buffers: Buffer[] = []
   let buffersLength: number = 0
   let headers: Headers = new Headers()
 
-  // The Event Socket parser will parse an incoming ES stream, whether your code is acting as a client (connected to the FreeSwitch ES server) or as a server (called back by FreeSwitch due to the "socket" application command).
-  // ### Dispatch incoming data into the header or body parsers.
-
-  // Capture the body as needed
-  socket.on('data', (data) => {
-    if (bodyLength > 0) {
-      captureBody(data)
-    } else {
-      captureHeaders(data)
-    }
-  })
-  // For completeness provide an `on_end()` method.
-  socket.once('end', () => {
-    if (buffersLength > 0) {
-      socket.emit(
-        'warning',
-        new FreeSwitchParserError(
-          'Buffer is not empty at end of stream',
-          Buffer.concat(buffers)
-        )
-      )
-    }
-  })
-
   // ### Capture body
   const captureBody = (data: Buffer): void => {
-    // When capturing the body, `buffer` contains the current data (text), and `bodyLength` contains how many bytes are expected to be read in the body.
-    buffersLength += data.length
+    /* When capturing the body, `buffers` contains the current data (text), `bodyLength` contains how many bytes are expected to be read in the body,
+     * and `buffersLength` contains how many bytes have been receiveds so far.
+     */
     buffers.push(data)
     // As long as the whole body hasn't been received, keep adding the new data into the buffer.
-    if (buffersLength < bodyLength) {
+    if (buffersLength + data.length < bodyLength) {
+      buffersLength += data.length
       return
     }
     // Consume the body once it has been fully received.
     const bodyBuffer = Buffer.concat(buffers, bodyLength)
-    const nextBuffer = data.subarray(buffersLength - bodyLength)
+    const nextBuffer = data.subarray(bodyLength - buffersLength)
 
     // Process the content at each step.
     processMessage(headers, bodyBuffer)
+
     bodyLength = 0
     headers = new Headers()
 
@@ -104,6 +83,25 @@ export const FreeSwitchParser = (
       // Re-parse whatever data was left after these headers were fully consumed.
       captureHeaders(nextBuffer)
     }
+  }
+
+  /* Read the socket using an async iterator */
+  await socket.forEach((data: Buffer) => {
+    if (bodyLength > 0) {
+      captureBody(data)
+    } else {
+      captureHeaders(data)
+    }
+  })
+
+  if (buffersLength > 0) {
+    socket.emit(
+      'warning',
+      new FreeSwitchParserError(
+        'Buffer is not empty at end of stream',
+        Buffer.concat(buffers)
+      )
+    )
   }
 }
 

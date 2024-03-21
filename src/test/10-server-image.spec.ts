@@ -33,7 +33,11 @@ test('10-server-image: should reloadxml', async function (t) {
   client.connect()
   const call = await p
   const res = await call.bgapi(cmd, 300)
-  t.regex(res.headers.replyText ?? '', /\+OK \[Success\]/)
+  t.log(res)
+  t.is(typeof res.body.response, 'string')
+  if (typeof res.body.response === 'string') {
+    t.regex(res.body.response, /\+OK \[Success\]/)
+  }
   client.end()
   t.pass()
 })

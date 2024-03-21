@@ -66,12 +66,13 @@ test.before(async (t) => {
     port: 7000,
   })
 })
+
 test.after.always(async (t) => {
   t.timeout(10 * second)
   await sleep(7 * second)
   const count = await server?.getConnectionCount()
-  t.is(count, 0, `Oops, ${count} active connections leftover`)
   await server?.close()
+  t.is(count, 0, `Oops, ${count} active connections leftover`)
   t.log('Service closed')
 })
 
@@ -90,13 +91,15 @@ test('should handle UUID-based commands', async function (t) {
     `originate {origination_uuid=${originationUUID},origination_channel_name='1234'}sofia/test-server/sip:answer-wait-30000@${domain} &park`,
     20000
   )
-  t.true('uuid' in res1)
-  const callUUID = res1.body.uniqueID
-  t.is(callUUID, originationUUID)
+  t.log(res1.body.response)
+  t.is(res1.body.response, `+OK ${originationUUID}\n`)
   await sleep(1000)
-  const res2 = await call.command_uuid(originationUUID, 'hangup', '', 1000)
-  t.true('body' in res2)
-  t.true('Hangup-Cause' in res2.body)
+  const res2 = await call.command_uuid(
+    originationUUID,
+    'hangup',
+    undefined,
+    1000
+  )
   t.is(res2.body.data['Hangup-Cause'], 'NORMAL_CLEARING')
   client.end()
 })
@@ -109,10 +112,12 @@ test('should map sequential responses', async function (t) {
   client.connect()
   const call = await onceConnected(client)
   const res1 = await call.bgapi('create_uuid', 100)
-  const uuid1 = res1.body
+  const uuid1 = res1.body.response
   const res2 = await call.bgapi('create_uuid', 100)
-  const uuid2 = res2.body
+  const uuid2 = res2.body.response
   client.end()
+  t.is(typeof uuid1, 'string')
+  t.is(typeof uuid2, 'string')
   t.not(uuid1, uuid2, 'UUIDs should be unique')
 })
 
@@ -124,9 +129,9 @@ test('should map sequential responses (using bgapi)', async function (t) {
   client.connect()
   const call = await onceConnected(client)
   const res1 = await call.bgapi('create_uuid', 100)
-  const uuid1 = res1.body
+  const uuid1 = res1.body.response
   const res2 = await call.bgapi('create_uuid', 100)
-  const uuid2 = res2.body
+  const uuid2 = res2.body.response
   client.end()
   t.not(uuid1, uuid2, 'UUIDs should be unique')
 })
@@ -141,36 +146,17 @@ test('should map sequential responses (sent in parallel)', async function (t) {
   let uuid1: string | undefined
   let uuid2: string | undefined
   const p1 = call.bgapi('create_uuid', 200).then((res): null => {
-    uuid1 = res.headers.replyText
+    t.is(typeof res.body.response, 'string')
+    if (typeof res.body.response === 'string') {
+      uuid1 = res.body.response
+    }
     return null
   })
   const p2 = call.bgapi('create_uuid', 200).then((res): null => {
-    uuid2 = res.headers.replyText
-    return null
-  })
-  await Promise.all([p1, p2])
-  client.end()
-  t.true(uuid1 != null, 'Not sequential')
-  t.true(uuid2 != null, 'Not sequential')
-  t.not(uuid1, uuid2, 'UUIDs should be unique')
-})
-
-test('should work with parallel responses (using api)', async function (t) {
-  const client = new FreeSwitchClient({
-    port: serverPort,
-    logger: clientLogger(t),
-  })
-  client.connect()
-  const call = await onceConnected(client)
-  let uuid1: string | null = null
-  let uuid2: string | null = null
-  const p1 = call.bgapi('create_uuid', 100).then((res): null => {
-    t.log(res.body)
-    uuid1 = res.body.uniqueID ?? 'FAILED 1'
-    return null
-  })
-  const p2 = call.bgapi('create_uuid', 100).then((res): null => {
-    uuid2 = res.body.uniqueID ?? 'FAILED 2'
+    t.is(typeof res.body.response, 'string')
+    if (typeof res.body.response === 'string') {
+      uuid2 = res.body.response
+    }
     return null
   })
   await Promise.all([p1, p2])
@@ -190,13 +176,13 @@ test('should work with parallel responses (using bgapi)', async function (t) {
   let uuid1 = null
   let uuid2 = null
   const p1 = call.bgapi('create_uuid', 100).then((res): null => {
-    t.log('uuid1', res)
-    uuid1 = res.body
+    t.is(typeof res.body.response, 'string')
+    uuid1 = res.body.response
     return null
   })
   const p2 = call.bgapi('create_uuid', 100).then((res): null => {
-    t.log('uuid2', res)
-    uuid2 = res.body
+    t.is(typeof res.body.response, 'string')
+    uuid2 = res.body.response
     return null
   })
   await Promise.all([p1, p2])

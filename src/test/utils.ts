@@ -30,10 +30,8 @@ export const clientLogger = function (
   t: ExecutionContext
 ): FreeSwitchClientLogger {
   return {
-    debug: (msg, obj) => {
-      t.log('clientLogger:debug', msg, obj)
-    },
-    // debug: (_msg, _obj) => { },
+    // debug: (msg, obj) => { t.log('clientLogger:debug', msg, obj) },
+    debug: (_msg, _obj) => {},
     info: (msg, obj) => {
       t.log('clientLogger:info', msg, obj)
     },

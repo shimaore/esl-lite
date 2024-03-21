@@ -4,12 +4,21 @@ const eventName = 'Event-Name'
 const applicationUUID = 'Application-UUID'
 const jobUUID = 'Job-UUID'
 const uniqueID = 'Unique-ID'
+
+/** `_body` is returned in `BACKGROUND_JOB`. */
+const body = '_body'
+
+/** Internal field name, used to report errors */
 const response = 'response'
 
 export class Body {
   constructor(public readonly data: Record<string, JSONValue>) {
     if (response in data) {
       const value = data[response]
+      this.response = value
+    }
+    if (body in data) {
+      const value = data[body]
       this.response = value
     }
 

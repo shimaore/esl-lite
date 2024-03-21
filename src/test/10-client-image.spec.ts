@@ -88,7 +88,7 @@ test('10-client-image: should reloadxml', async function (t) {
 })
 
 test.serial(
-  '10-client-image: should properly parse plainevents',
+  '10-client-image: should properly parse plain events',
   async function (t) {
     const client = new FreeSwitchClient({
       port: clientPort,
@@ -108,7 +108,7 @@ test.serial(
             'Event-XBar': 'some',
           })
           const [msg] = await msgP
-          t.like(msg.body, {
+          t.like(msg.body.data, {
             'Event-Name': 'CUSTOM',
             'Event-XBar': 'some',
           })
@@ -146,7 +146,7 @@ test.serial(
             'Event-XBar': 'ë°ñ',
           })
           const [msg] = await msgP
-          t.like(msg.body, {
+          t.like(msg.body.data, {
             'Event-Name': 'CUSTOM',
             'Event-XBar': 'ë°ñ',
           })

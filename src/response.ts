@@ -349,8 +349,19 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
     // The parser is responsible for de-framing messages coming from FreeSwitch and splitting it into headers and a body.
     // We then process those in order to generate higher-level events.
     FreeSwitchParser(this.__socket, (headers: Headers, body: Buffer) => {
-      this.process(headers, body)
-    })
+      ;(async () => {
+        this.process(headers, body)
+      })().catch((err) => {
+        this.logger.error('process failed', { err, ref: this.ref() })
+      })
+    }).then(
+      () => {
+        this.logger.info('Parser terminated', { ref: this.ref() })
+      },
+      (err: any) => {
+        this.logger.error('Parser crashed', { err, ref: this.ref() })
+      }
+    )
 
     // The object also provides a queue for operations which need to be submitted one after another on a given socket because FreeSwitch does not provide ways to map event socket requests and responses in the general case.
     this.__queue = Promise.resolve(true)
@@ -621,25 +632,14 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
       const reply = headers.replyText
       // The Promise might fail if FreeSwitch's notification indicates an error.
       if (reply == null) {
-        this.logger.debug('FreeSwitchResponse: send: no reply', {
-          ref: this.__ref,
-          command,
-          args,
-        })
         return await this.error(res, {
           when: 'no reply to command',
           command,
         })
       }
       if (reply.match(/^-/) != null) {
-        this.logger.debug('FreeSwitchResponse: send: failed', {
-          ref: this.__ref,
-          reply,
-          command,
-          args,
-        })
         return await this.error(res, {
-          when: 'command reply',
+          when: 'command reply indicates failure',
           reply,
           command,
         })
@@ -740,8 +740,9 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
           bodyValues = jsonParseBuffer(body)
         } catch (exception) {
           // In case of error report it as an error.
-          this.logger.error('FreeSwitchResponse: Invalid JSON', {
+          this.logger.error('process: Invalid JSON', {
             ref: this.__ref,
+            headers,
             body,
           })
           this.stats.json_parse_errors++
@@ -877,19 +878,16 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   // bgapi
   // -----
 
-  // Send an API command in the background. Wraps it inside a Promise.
+  /** Send an API command in the background. Wraps it inside a Promise.
+   *  `bgapi` will throw if the job submission fails.
+   *  However it will not throw if the background job failed. You can check the response
+   *  from the background job in the `response` field of the return value.
+   */
   async bgapi(command: string, timeout: number): SendResult {
-    if (this.closed) {
-      return await this.error(undefined, {
-        when: 'bgapi on closed socket',
-        command,
-      })
-    }
-    // FIXME does this actually have to be a UUID?
     const jobUUID = ulid()
-    const p = await this.awaitBackgroundJob(jobUUID, timeout)
+    const p = this.awaitBackgroundJob(jobUUID, timeout)
     await this.send(`bgapi ${command}`, { 'job-uuid': jobUUID }, timeout)
-    return p
+    return await p
   }
 
   // Event reception and filtering
@@ -1009,9 +1007,8 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
     args: ValueMap
   ): SendResult {
     const options = { ...args, 'call-command': command }
-    let executeText = 'sendmsg'
     // alternatively, `uuid` might be specified as header `session-id`
-    executeText = `sendmsg ${uuid}`
+    const executeText = `sendmsg ${uuid}`
     return await this.send(executeText, options, this.localTimeout)
   }
 
