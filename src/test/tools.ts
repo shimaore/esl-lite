@@ -50,16 +50,17 @@ const commonOptions = [
 ]
 
 export const simpleStartClient = async (
-  log: (...values: any[]) => void
+  log: (...values: any[]) => void,
+  stdio: 'ignore' | 'inherit'
 ): Promise<void> => {
   const dir = `/tmp/client-${ulid()}`
-  log('Starting FS with client profile')
+  log('Starting FS with client profile', { stdio })
   await mkdir(dir)
   fsClient = spawn(
     '/usr/bin/freeswitch',
     [...commonOptions, '-cfgname', 'client.xml', '-log', dir, '-db', dir],
     {
-      stdio: ['ignore', 'ignore', 'inherit'],
+      stdio: [stdio, stdio, 'inherit'],
     }
   )
   if (fsClient != null) {
@@ -88,16 +89,17 @@ export const simpleStartClient = async (
 }
 
 export const simpleStartServer = async (
-  log: (...values: any[]) => void
+  log: (...values: any[]) => void,
+  stdio: 'ignore' | 'inherit'
 ): Promise<void> => {
   const dir = `/tmp/server-${ulid()}`
-  log('Starting FS with server profile')
+  log('Starting FS with server profile', { stdio })
   await mkdir(dir)
   fsServer = spawn(
     '/usr/bin/freeswitch',
     [...commonOptions, '-cfgname', 'server.xml', '-log', dir, '-db', dir],
     {
-      stdio: ['ignore', 'ignore', 'inherit'],
+      stdio: [stdio, stdio, 'inherit'],
     }
   )
   fsServer.on('error', function (error) {

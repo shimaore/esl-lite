@@ -20,9 +20,12 @@ export const DoCatch = function <T>(
   void f().catch(t.log)
 }
 
-export const start = async (t: ExecutionContext): Promise<void> => {
+export const start = async (
+  t: ExecutionContext,
+  stdio: 'ignore' | 'inherit' = 'ignore'
+): Promise<void> => {
   t.timeout(12 * second)
-  await Promise.all([startClient(t), startServer(t)])
+  await Promise.all([startClient(t, stdio), startServer(t, stdio)])
   t.pass()
 }
 
@@ -71,15 +74,21 @@ export const responseLogger = function (
   }
 }
 
-export const startClient = async (t: ExecutionContext): Promise<void> => {
+export const startClient = async (
+  t: ExecutionContext,
+  stdio: 'ignore' | 'inherit' = 'ignore'
+): Promise<void> => {
   t.timeout(12 * second)
-  await simpleStartClient(t.log)
+  await simpleStartClient(t.log, stdio)
   t.pass()
 }
 
-export const startServer = async (t: ExecutionContext): Promise<void> => {
+export const startServer = async (
+  t: ExecutionContext,
+  stdio: 'ignore' | 'inherit' = 'ignore'
+): Promise<void> => {
   t.timeout(12 * second)
-  await simpleStartServer(t.log)
+  await simpleStartServer(t.log, stdio)
   t.pass()
 }
 

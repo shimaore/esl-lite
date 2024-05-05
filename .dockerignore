@@ -15,3 +15,4 @@ test/*.log
 test/log/
 test/*.mjs
 test/routes/
+test/Dockerfile

@@ -683,11 +683,6 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
 
   // Rewrite headers as needed to work around some weirdnesses in the protocol; and assign unified event IDs to the Event Socket's Content-Types.
   process(headers: Headers, body: Buffer): void {
-    this.logger.debug('FreeSwitchResponse::process', {
-      ref: this.__ref,
-      headers,
-      body,
-    })
     const contentType = headers.contentType
     if (contentType == null) {
       this.stats.missing_contentType++
