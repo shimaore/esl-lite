@@ -1,11 +1,11 @@
-FROM alpine:edge
+FROM node:21-alpine
 
-RUN apk --update add nodejs-current freeswitch
+RUN apk --update add freeswitch
 WORKDIR /opt
 
 COPY package.json /opt/
 COPY yarn.lock /opt/
-RUN corepack enable && yarn --immutable
+RUN yarn --immutable
 
 COPY build.mjs /opt/
 COPY src /opt/src

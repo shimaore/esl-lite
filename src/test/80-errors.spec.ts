@@ -133,7 +133,7 @@ test('should detect invalid syntax', async function (t) {
   const service = await p
   try {
     await service.bgapi('originate foobar', 1000)
-    t.fail()
+    t.fail('Should not be successful')
   } catch (error) {
     t.log(error)
     if (error instanceof FreeSwitchError) {
@@ -216,6 +216,7 @@ test('should detect missing host', async function (t) {
       1000
     )
     t.log('API was successful', res)
+    t.fail('Should not be successful')
   } catch (error) {
     t.log('API failed', error)
     if (
@@ -263,6 +264,7 @@ test('should detect closed port', async function (t) {
       1000
     )
     t.log('API was successful', res)
+    t.fail('Should not be successful')
   } catch (error) {
     t.log('API failed', error)
     if (
@@ -303,10 +305,12 @@ test('should detect invalid destination', async function (t) {
     tracer_uuid: id,
   }
   try {
-    await service.bgapi(
+    const res = await service.bgapi(
       `originate [${optionsText(options)}]sofia/test-client/sip:foobared@${domain} &park`,
       1000
     )
+    t.log('API was successful', res)
+    t.fail('Should not be successful')
   } catch (error) {
     if (
       typeof error === 'object' &&
@@ -345,10 +349,12 @@ test('should detect late progress', async function (t) {
   }
   const duration = timer()
   try {
-    await service.bgapi(
+    const res = await service.bgapi(
       `originate [${optionsText(options)}]sofia/test-client/sip:wait-24000-ring-ready@${domain} &park`,
       1000
     )
+    t.log('API was successful', res)
+    t.fail('Should not be successful')
   } catch (error) {
     if (
       typeof error === 'object' &&
@@ -436,10 +442,7 @@ const shouldDetect = function (code: string, pattern: RegExp) {
 }
 
 // Anything below 4xx isn't an error
-test.serial.only(
-  'should detect 403',
-  shouldDetect('403', /^-ERR CALL_REJECTED/)
-)
+test.serial('should detect 403', shouldDetect('403', /^-ERR CALL_REJECTED/))
 
 test.serial(
   'should detect 404',

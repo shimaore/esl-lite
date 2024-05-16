@@ -20,5 +20,12 @@
     "composite": true,
     "skipLibCheck": true
   },
-  "exclude": ["build", "test-ts", "types", "esl-lite.mjs", "esl-lite.cjs"]
+  "exclude": [
+    "build",
+    "test-ts",
+    "types",
+    "esl-lite.mjs",
+    "esl-lite.cjs",
+    "yarn*"
+  ]
 }
