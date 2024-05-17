@@ -14,11 +14,10 @@ const socket = {
   forEach: function () {},
 } as unknown as Socket
 
-test('01-args: should throw properly on closed (bgapi)', async function (t) {
+test('01-args: should report properly on closed (bgapi)', async function (t) {
   const T = new FreeSwitchResponse(socket, logger(t))
   T.closed = true
-  await T.bgapi('foo', 1000).catch(function (error: any) {
-    t.log('Caught', error)
-    return t.true(error instanceof FreeSwitchClosedError)
-  })
+  const res = await T.bgapi('foo', 1000)
+  t.log('Result', res)
+  t.true(res instanceof FreeSwitchClosedError, 'Expect FreeSwitchClosedError')
 })

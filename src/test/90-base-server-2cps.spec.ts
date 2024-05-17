@@ -1,11 +1,6 @@
 import test from 'ava'
 
-import {
-  FreeSwitchClient,
-  FreeSwitchError,
-  once,
-  FreeSwitchEventEmitter,
-} from '../esl-lite.js'
+import { FreeSwitchClient, once, FreeSwitchEventEmitter } from '../esl-lite.js'
 
 import {
   start,
@@ -308,17 +303,20 @@ test('should handle chained commands', async function (t) {
   const [service] = await p
   const q = once(ev, 'server7022')
   await service.event_json(['ALL'])
-  try {
-    await service.bgapi(
-      `originate sofia/test-client/sip:server7022@${domain} &park`,
-      8000
-    )
-  } catch (err) {
-    t.log(err)
-    if (err instanceof FreeSwitchError) {
-      t.is(err.res?.headers.replyText, '-ERR NORMAL_CLEARING\n')
+  const res = await service.bgapi(
+    `originate sofia/test-client/sip:server7022@${domain} &park`,
+    8000
+  )
+  t.log(res)
+  if (res instanceof Error) {
+    t.fail(res.message)
+  } else {
+    const { response } = res.body
+    if (typeof response === 'string') {
+      t.is(response, '-ERR NORMAL_CLEARING\n')
     } else {
-      t.fail()
+      t.fail('response is not a string')
+      t.log(response)
     }
   }
   await q

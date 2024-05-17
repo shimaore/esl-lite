@@ -1,11 +1,14 @@
 import test from 'ava'
 
-import { FreeSwitchClient } from '../esl-lite.js'
+import {
+  FreeSwitchClient,
+  FreeSwitchParserNonEmptyBufferAtEndError,
+} from '../esl-lite.js'
 
 import { createServer } from 'node:net'
 
 import { sleep } from './tools.js'
-import { clientLogger, onceConnected, onceWarning } from './utils.js'
+import { clientLogger, onceWarning } from './utils.js'
 
 const clientPort = 5621
 
@@ -51,18 +54,15 @@ Disconnected, filling your buffer with junk.
       port: clientPort,
       logger,
     })
-    const pCall = onceConnected(client)
     const pExpect = onceWarning(client)
     client.connect()
     t.log('buffer-at-end: called connect')
-    const call = await pCall
-    t.log('buffer-at-end: got call', {
-      ref: call.ref(),
-    })
-    await sleep(200)
     const error = await pExpect
     t.log('buffer-at-end: got error', error)
-    t.is(error.error, 'Buffer is not empty at end of stream')
+    t.true(
+      error instanceof FreeSwitchParserNonEmptyBufferAtEndError,
+      'Buffer is not empty at end of stream'
+    )
     client.end()
     spoof.close()
   } catch (error) {

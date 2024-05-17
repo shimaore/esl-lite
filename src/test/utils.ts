@@ -1,8 +1,8 @@
 import {
   type FreeSwitchClient,
-  type FreeSwitchParserError,
   type FreeSwitchResponse,
   type FreeSwitchClientLogger,
+  type FreeSwitchParserNonEmptyBufferAtEndError,
 } from '../esl-lite.js'
 import type * as legacyESL from 'esl'
 import {
@@ -107,7 +107,7 @@ export const onceConnected = async (
 }
 export const onceWarning = async (
   client: FreeSwitchClient
-): Promise<FreeSwitchParserError> => {
+): Promise<FreeSwitchParserNonEmptyBufferAtEndError> => {
   return await new Promise((resolve) => {
     client.once('warning', resolve)
   })

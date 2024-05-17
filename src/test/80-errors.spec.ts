@@ -1,6 +1,6 @@
 import test, { type ExecutionContext } from 'ava'
 
-import { FreeSwitchClient, FreeSwitchError } from '../esl-lite.js'
+import { FreeSwitchClient } from '../esl-lite.js'
 
 import {
   DoCatch,
@@ -131,15 +131,17 @@ test('should detect invalid syntax', async function (t) {
   const p = onceConnected(client)
   client.connect()
   const service = await p
-  try {
-    await service.bgapi('originate foobar', 1000)
-    t.fail('Should not be successful')
-  } catch (error) {
-    t.log(error)
-    if (error instanceof FreeSwitchError) {
-      t.regex(error.res?.headers.replyText ?? 'NONE', /^-USAGE/)
+  const res = await service.bgapi('originate foobar', 1000)
+  t.log('response', res)
+  if (res instanceof Error) {
+    t.fail(res.message)
+  } else {
+    const { response } = res.body
+    if (typeof response === 'string') {
+      t.regex(response, /^-USAGE/)
     } else {
-      t.fail()
+      t.fail('response is not a string')
+      t.log(response)
     }
   }
   client.end()
@@ -210,33 +212,23 @@ test('should detect missing host', async function (t) {
     tracer_uuid: id,
   }
   const duration = timer()
-  try {
-    const res = await service.bgapi(
-      `originate [${optionsText(options)}]sofia/test-client-open/sip:test@172.17.0.46:9999 &park`,
-      1000
-    )
-    t.log('API was successful', res)
-    t.fail('Should not be successful')
-  } catch (error) {
-    t.log('API failed', error)
-    if (
-      typeof error === 'object' &&
-      error != null &&
-      'args' in error &&
-      typeof error.args === 'object' &&
-      error.args != null &&
-      'command' in error.args &&
-      'reply' in error.args &&
-      typeof error.args.command === 'string' &&
-      typeof error.args.reply === 'string'
-    ) {
-      t.regex(error.args.command, RegExp(`tracer_uuid=${id}`))
-      t.regex(error.args.reply, /^-ERR RECOVERY_ON_TIMER_EXPIRE/)
+  const res = await service.bgapi(
+    `originate [${optionsText(options)}]sofia/test-client-open/sip:test@172.17.0.46:9999 &park`,
+    3000
+  )
+  t.log('API was successful', res)
+  if (res instanceof Error) {
+    t.fail(res.message)
+  } else {
+    const { response } = res.body
+    if (typeof response === 'string') {
+      t.regex(response, /^-ERR RECOVERY_ON_TIMER_EXPIRE/)
       const d = duration()
       t.true(d > 1 * second, `Duration is too short (${d}ms)`)
       t.true(d < 3 * second, `Duration is too long (${d}ms)`)
     } else {
-      t.fail('Missing args and/or args.command/args.reply')
+      t.fail('response is not a string')
+      t.log(response)
     }
   }
   client.end()
@@ -258,32 +250,23 @@ test('should detect closed port', async function (t) {
     tracer_uuid: id,
   }
   const duration = timer()
-  try {
-    const res = await service.bgapi(
-      `originate [${optionsText(options)}]sofia/test-client/sip:test@127.0.0.1:1310 &park`,
-      1000
-    )
-    t.log('API was successful', res)
-    t.fail('Should not be successful')
-  } catch (error) {
-    t.log('API failed', error)
-    if (
-      typeof error === 'object' &&
-      error != null &&
-      'args' in error &&
-      typeof error.args === 'object' &&
-      error.args != null &&
-      'command' in error.args &&
-      'reply' in error.args &&
-      typeof error.args.command === 'string' &&
-      typeof error.args.reply === 'string'
-    ) {
-      t.regex(error.args.command, RegExp(`tracer_uuid=${id}`))
-      t.regex(error.args.reply, /^-ERR NORMAL_TEMPORARY_FAILURE/)
+  const res = await service.bgapi(
+    `originate [${optionsText(options)}]sofia/test-client/sip:test@127.0.0.1:1310 &park`,
+    2000
+  )
+  t.log('API was successful', res)
+
+  if (res instanceof Error) {
+    t.fail(res.message)
+  } else {
+    const { response } = res.body
+    if (typeof response === 'string') {
+      t.regex(response, /^-ERR NORMAL_TEMPORARY_FAILURE/)
       const d = duration()
       t.true(d < 4 * second, `Duration is too long (${d}ms)`)
     } else {
-      t.fail('Missing args and/or args.command/args.reply')
+      t.fail('response is not a string')
+      t.log(response)
     }
   }
   client.end()
@@ -304,29 +287,20 @@ test('should detect invalid destination', async function (t) {
     leg_timeout: 16,
     tracer_uuid: id,
   }
-  try {
-    const res = await service.bgapi(
-      `originate [${optionsText(options)}]sofia/test-client/sip:foobared@${domain} &park`,
-      1000
-    )
-    t.log('API was successful', res)
-    t.fail('Should not be successful')
-  } catch (error) {
-    if (
-      typeof error === 'object' &&
-      error != null &&
-      'args' in error &&
-      typeof error.args === 'object' &&
-      error.args != null &&
-      'command' in error.args &&
-      'reply' in error.args &&
-      typeof error.args.command === 'string' &&
-      typeof error.args.reply === 'string'
-    ) {
-      t.regex(error.args.command, RegExp(`tracer_uuid=${id}`))
-      t.regex(error.args.reply, /^-ERR NO_ROUTE_DESTINATION/)
+  const res = await service.bgapi(
+    `originate [${optionsText(options)}]sofia/test-client/sip:foobared@${domain} &park`,
+    1000
+  )
+  t.log('API was successful', res)
+  if (res instanceof Error) {
+    t.fail(res.message)
+  } else {
+    const { response } = res.body
+    if (typeof response === 'string') {
+      t.regex(response, /^-ERR NO_ROUTE_DESTINATION/)
     } else {
-      t.fail('Missing args and/or args.command/args.reply')
+      t.fail('response is not a string')
+      t.log(response)
     }
   }
   client.end()
@@ -348,30 +322,22 @@ test('should detect late progress', async function (t) {
     tracer_uuid: id,
   }
   const duration = timer()
-  try {
-    const res = await service.bgapi(
-      `originate [${optionsText(options)}]sofia/test-client/sip:wait-24000-ring-ready@${domain} &park`,
-      1000
-    )
-    t.log('API was successful', res)
-    t.fail('Should not be successful')
-  } catch (error) {
-    if (
-      typeof error === 'object' &&
-      error != null &&
-      'args' in error &&
-      typeof error.args === 'object' &&
-      error.args != null &&
-      'command' in error.args &&
-      'reply' in error.args &&
-      typeof error.args.command === 'string' &&
-      typeof error.args.reply === 'string'
-    ) {
-      t.regex(error.args.reply, /^-ERR PROGRESS_TIMEOUT/)
+  const res = await service.bgapi(
+    `originate [${optionsText(options)}]sofia/test-client/sip:wait-24000-ring-ready@${domain} &park`,
+    9000
+  )
+  t.log('API was successful', res)
+  if (res instanceof Error) {
+    t.fail(res.message)
+  } else {
+    const { response } = res.body
+    if (typeof response === 'string') {
+      t.regex(response, /^-ERR PROGRESS_TIMEOUT/)
       t.true(duration() > (options.leg_progress_timeout - 1) * second)
       t.true(duration() < (options.leg_progress_timeout + 1) * second)
     } else {
-      t.fail('Missing args and/or args.command/args.reply')
+      t.fail('response is not a string')
+      t.log(response)
     }
   }
   client.end()
@@ -419,22 +385,20 @@ const shouldDetect = function (code: string, pattern: RegExp) {
         variable_billmsec: '0',
       })
     })
-    await service.filter('variable_tracer_uuid', id)
     await service.event_json(['ALL'])
     t.log(`sending call for ${code}`)
-    try {
-      const res = await service.bgapi(
-        `originate {${optionsText(options)}}sofia/test-client/sip:wait-100-respond-${code}@${domain} &park`,
-        500
-      )
-      t.log(`bgapi returned for ${code}`)
-      t.log(res)
+    const res = await service.bgapi(
+      `originate {${optionsText(options)}}sofia/test-client/sip:wait-100-respond-${code}@${domain} &park`,
+      500
+    )
+    t.log(`bgapi returned for ${code}`, res)
+    if (res instanceof Error) {
+      t.fail(res.message)
+    } else {
       t.is(typeof res.body.response, 'string')
       if (typeof res.body.response === 'string') {
         t.regex(res.body.response, pattern)
       }
-    } catch (ex) {
-      t.log(ex)
     }
     await sleep(50)
     client.end()

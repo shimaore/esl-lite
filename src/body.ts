@@ -58,6 +58,15 @@ export class Body {
   set(name: string, value: string): void {
     this.data[name] = value
 
+    if (name === response) {
+      this.response = value
+      return
+    }
+    if (name === body) {
+      this.response = value
+      return
+    }
+
     if (name === eventName) {
       this.eventName = value
       return

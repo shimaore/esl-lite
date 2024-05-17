@@ -10,7 +10,9 @@ import {
 } from './utils.js'
 
 import * as legacyESL from 'esl'
-import { FreeSwitchClient } from '../esl-lite.js'
+import { FreeSwitchClient, FreeSwitchFailedCommandError } from '../esl-lite.js'
+import { sleep } from './tools.js'
+import { ulid } from 'ulidx'
 
 const clientPort = 8024
 const domain = '127.0.0.1:5062'
@@ -27,6 +29,7 @@ test('03-ok', async (t) => {
     DoCatch(t, async () => {
       t.log('server: call command answer')
       await call.command('answer')
+      await sleep(10_000)
       t.log('server: call command hangup')
       await call.command('hangup')
       t.log('server: call end')
@@ -43,16 +46,22 @@ test('03-ok', async (t) => {
   client.connect()
   const service = await p
   t.log('client: service bgapi originate')
+  const uuid = ulid()
   const res = await service.bgapi(
-    `originate sofia/test-client/sip:server7002@${domain} &park`,
+    `originate {origination_uuid=${uuid}}sofia/test-client/sip:server7002@${domain} &park`,
     1000
   )
-  t.log(res)
-  t.log('client: service hangup')
-  try {
-    await service.hangup_uuid(res.body.uniqueID ?? 'NONE')
-  } catch (err) {
-    t.log('client: service hangup', err)
+  t.log('bgapi response', res)
+  if (res instanceof Error) {
+    t.fail(res.message)
+  } else {
+    t.log('client: service hangup')
+    const res2 = await service.hangup_uuid(uuid)
+    if (res2 instanceof FreeSwitchFailedCommandError) {
+      t.fail(res2.response)
+    } else if (res2 instanceof Error) {
+      t.fail(res2.message)
+    }
   }
   t.log('client: end')
   client.end()

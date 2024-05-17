@@ -51,10 +51,8 @@
   "scripts": {
     "build": "node build.mjs",
     "prepublishOnly": "yarn install && yarn build && yarn syntax",
-    "prelint": "yarn syntax",
-    "lint": "eslint --fix src/**/*.ts && prettier -w .",
-    "pretest": "yarn prepublishOnly",
-    "test": "nyc ava -c 1 --fail-fast",
+    "lint": "yarn syntax && eslint --fix src/**/*.ts && prettier -w .",
+    "test": "yarn prepublishOnly && nyc ava -c 1 --fail-fast",
     "test:optimize": "node --trace-deopt build/trace/benchmark.js | grep bailout",
     "syntax": "tsc",
     "test:live": "podman  build --ulimit nofile=1048576:1048576 -f test/Dockerfile ."

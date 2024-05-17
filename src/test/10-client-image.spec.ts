@@ -2,7 +2,6 @@ import test from 'ava'
 
 import {
   FreeSwitchClient,
-  FreeSwitchError,
   type FreeSwitchEventData,
   once,
 } from '../esl-lite.js'
@@ -98,20 +97,24 @@ test.serial(
       void (async function () {
         try {
           const res = await call.send('event plain ALL', {}, 1000)
-          t.regex(
-            res.headers.replyText ?? '',
-            /\+OK event listener enabled plain/
-          )
-          const msgP = once(call, 'CUSTOM')
-          await call.sendevent('CUSTOM', {
-            'Event-Name': 'CUSTOM',
-            'Event-XBar': 'some',
-          })
-          const [msg] = await msgP
-          t.like(msg.body.data, {
-            'Event-Name': 'CUSTOM',
-            'Event-XBar': 'some',
-          })
+          if (res instanceof Error) {
+            t.fail(res.message)
+          } else {
+            t.regex(
+              res.headers.replyText ?? '',
+              /\+OK event listener enabled plain/
+            )
+            const msgP = once(call, 'CUSTOM')
+            await call.sendevent('CUSTOM', {
+              'Event-Name': 'CUSTOM',
+              'Event-XBar': 'some',
+            })
+            const [msg] = await msgP
+            t.like(msg.body.data, {
+              'Event-Name': 'CUSTOM',
+              'Event-XBar': 'some',
+            })
+          }
           call.end('Test completed')
           client.end()
           t.pass()
@@ -136,20 +139,24 @@ test.serial(
       void (async function () {
         try {
           const res = await call.send('event json ALL', {}, 1000)
-          t.regex(
-            res.headers.replyText ?? '',
-            /\+OK event listener enabled json/
-          )
-          const msgP = once(call, 'CUSTOM') as Promise<[FreeSwitchEventData]>
-          await call.sendevent('CUSTOM', {
-            'Event-Name': 'CUSTOM',
-            'Event-XBar': 'ë°ñ',
-          })
-          const [msg] = await msgP
-          t.like(msg.body.data, {
-            'Event-Name': 'CUSTOM',
-            'Event-XBar': 'ë°ñ',
-          })
+          if (res instanceof Error) {
+            t.fail(res.message)
+          } else {
+            t.regex(
+              res.headers.replyText ?? '',
+              /\+OK event listener enabled json/
+            )
+            const msgP = once(call, 'CUSTOM') as Promise<[FreeSwitchEventData]>
+            await call.sendevent('CUSTOM', {
+              'Event-Name': 'CUSTOM',
+              'Event-XBar': 'ë°ñ',
+            })
+            const [msg] = await msgP
+            t.like(msg.body.data, {
+              'Event-Name': 'CUSTOM',
+              'Event-XBar': 'ë°ñ',
+            })
+          }
           call.end('Test completed')
           client.end()
           t.pass()
@@ -172,25 +179,21 @@ test.skip('10-client-image: should detect failed socket', async function (t) {
   client.on('connect', function (call): void {
     void (async function () {
       try {
-        const error = await call
-          .bgapi(
-            'originate sofia/test-client/sip:server-failed@127.0.0.1:34564 &park',
-            1000
-          )
-          .catch(function (error: unknown) {
-            return error
-          })
+        const res = await call.bgapi(
+          'originate sofia/test-client/sip:server-failed@127.0.0.1:34564 &park',
+          1000
+        )
         // FIXME currently return CHAN_NOT_IMPLEMENTED
-        if (
-          error instanceof FreeSwitchError &&
-          typeof error.res?.headers.replyText === 'string'
-        ) {
-          t.regex(
-            error.res?.headers.replyText,
-            /^-ERR NORMAL_TEMPORARY_FAILURE/
-          )
+        if (res instanceof Error) {
+          t.fail(res.message)
         } else {
-          t.fail()
+          const { response } = res.body
+          if (typeof response === 'string') {
+            t.regex(response, /^-ERR NORMAL_TEMPORARY_FAILURE/)
+          } else {
+            t.fail('response is not a string')
+            t.log(response)
+          }
         }
         client.end()
         t.pass()

@@ -13,6 +13,5 @@ RUN yarn build
 
 COPY test /opt/test
 COPY tsconfig.json /opt/
-RUN yarn syntax && yarn pretest
 
 RUN ulimit -a && yarn test

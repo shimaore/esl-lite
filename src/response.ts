@@ -4,7 +4,10 @@ import { FreeSwitchEventEmitter } from './event-emitter.js'
 
 import { ulid } from 'ulidx'
 
-import { FreeSwitchParser } from './parser.js'
+import {
+  FreeSwitchParser,
+  FreeSwitchParserNonEmptyBufferAtEndError,
+} from './parser.js'
 import { type Headers } from './headers.js'
 
 import { type Socket } from 'node:net'
@@ -41,104 +44,74 @@ export interface FreeSwitchResponseLogger {
   error: ResponseLogger
 }
 
-const asyncLog = function <T>(
-  msg: string,
-  ref: string,
-  af: () => Promise<T>,
-  logger: FreeSwitchResponseLogger
-): () => Promise<T> {
-  return async function () {
-    return await af().catch(function (error) {
-      logger.error(`FreeSwitchResponse::asyncLog: ${msg}`, { error, ref })
-      throw error
-    })
-  }
-}
-
-export class FreeSwitchError extends Error {
-  public readonly res:
-    | FreeSwitchEventData
-    | { headers: Headers; body: Buffer }
-    | undefined
-
-  public readonly args: Record<string, string | JSONMap | undefined>
-  constructor(
-    res: FreeSwitchEventData | { headers: Headers; body: Buffer } | undefined,
-    args: Record<string, string | JSONMap | undefined>
-  ) {
-    super('FreeSwitchError')
-    this.res = res
-    this.args = args
-  }
-
-  override toString(): string {
-    return `FreeSwitchError: ${JSON.stringify(this.args)}`
-  }
-}
-
 export class FreeSwitchUnhandledContentTypeError extends Error {
-  public readonly contentType: string
-  constructor(contentType: string) {
-    super('FreeSwitchUnhandledContentTypeError')
-    this.contentType = contentType
-  }
-
-  override toString(): string {
-    return `FreeSwitchUnhandledContentTypeError: ${this.contentType}`
+  constructor(public readonly contentType: string) {
+    super(`FreeSwitchUnhandledContentTypeError: ${contentType}`)
   }
 }
 
 export class FreeSwitchMissingContentTypeError extends Error {
-  public readonly headers: Headers
-  public readonly body: Buffer
-  constructor(headers: Headers, body: Buffer) {
+  constructor(
+    public readonly headers: Headers,
+    public readonly body: Buffer
+  ) {
     super('FreeSwitchMissingContentTypeError')
-    this.headers = headers
-    this.body = body
-  }
-
-  override toString(): string {
-    return `FreeSwitchMissingContentTypeError: ${JSON.stringify({ headers: this.headers, body: this.body })}`
   }
 }
 
 export class FreeSwitchMissingEventNameError extends Error {
-  public readonly headers: Headers
-  public readonly body: Buffer
-  constructor(headers: Headers, body: Buffer) {
+  constructor(
+    public readonly headers: Headers,
+    public readonly body: Buffer
+  ) {
     super('FreeSwitchMissingEventNameError ')
-    this.headers = headers
-    this.body = body
-  }
-
-  override toString(): string {
-    return `FreeSwitchMissingEventNameError: ${JSON.stringify({ headers: this.headers, body: this.body })}`
   }
 }
 
 export class FreeSwitchTimeoutError extends Error {
-  public readonly timeout: number
-  public readonly text: string
-  constructor(timeout: number, text: string) {
-    super('FreeSwitchTimeoutError')
-    this.timeout = timeout
-    this.text = text
-  }
-
-  override toString(): string {
-    return `FreeSwitchTimeout: Timeout after ${this.timeout}ms waiting for ${this.text}`
+  constructor(
+    public readonly timeout: number,
+    public readonly text: string
+  ) {
+    super(`FreeSwitchTimeout: Timeout after ${timeout}ms waiting for ${text}`)
   }
 }
 
 export class FreeSwitchClosedError extends Error {
-  constructor() {
-    super('FreeSwitchClosedError')
-  }
-
-  override toString(): string {
-    return 'FreeSwitchClosedError'
+  constructor(public readonly when: string) {
+    super(`FreeSwitchClosedError: socket closed ${when}`)
   }
 }
+
+export class FreeSwitchNoReplyError extends Error {
+  constructor(public readonly command: string) {
+    super('FreeSwitchNoReplyError: no reply')
+  }
+}
+
+export class FreeSwitchFailedCommandError extends Error {
+  constructor(
+    public readonly command: string,
+    public readonly response: string
+  ) {
+    super('FreeSwitchFailedCommandError: command failed')
+  }
+}
+
+export class FreeSwitchAbortError extends Error {
+  constructor() {
+    super('FreeSwitchAbortError: operation was canceled')
+  }
+}
+
+interface AbortSignalEvents {
+  abort: () => void
+}
+
+type AbortSignalEventEmitter = FreeSwitchEventEmitter<
+  keyof AbortSignalEvents,
+  AbortSignalEvents
+>
 
 export interface FreeSwitchEventData {
   /** Headers */
@@ -146,31 +119,54 @@ export interface FreeSwitchEventData {
   /** Body */
   body: Body
 }
-type SendResult = Promise<FreeSwitchEventData> // or FreeSwitchError
 
-export interface FreeSwitchResponseEvents {
+export interface FreeSwitchParserData {
+  headers: Headers
+  body: Buffer
+}
+
+type SendResult = Promise<
+  | FreeSwitchEventData
+  | FreeSwitchClosedError
+  | FreeSwitchNoReplyError
+  | FreeSwitchFailedCommandError
+  | FreeSwitchClosedError
+  | FreeSwitchTimeoutError
+  | FreeSwitchAbortError
+>
+export interface FreeSwitchParserEvents {
   // Not listing internally-processed events.
   // May also receive `freeswitch_<contentType>` — these are errors, though,
   // we should support all content-types reported by mod_event_socket at this
   // time.
 
-  'socket.close': (outcome: undefined) => void
-  'socket.error': (err: Error) => void
-  'socket.write': (err: Error) => void
-  'socket.end': (err: Error) => void
   'error.missing-content-type': (err: FreeSwitchMissingContentTypeError) => void
   'error.unhandled-content-type': (
     err: FreeSwitchUnhandledContentTypeError
   ) => void
   'error.invalid-json': (err: Error) => void
   'error.missing-event-name': (err: FreeSwitchMissingEventNameError) => void
-  freeswitch_log_data: (data: { headers: Headers; body: Buffer }) => void
-  freeswitch_disconnect_notice: (data: {
-    headers: Headers
-    body: Buffer
-  }) => void
+  freeswitch_log_data: (data: FreeSwitchParserData) => void
+  'error.buffer-not-empty-at-end': (
+    err: FreeSwitchParserNonEmptyBufferAtEndError
+  ) => void
+}
 
-  // FIXME not sure how to use EventName here
+export interface FreeSwitchSocketEvents {
+  'socket.close': (err: FreeSwitchClosedError) => void
+  'socket.error': (err: Error) => void
+  'socket.write': (err: Error) => void
+  'socket.end': (err: Error) => void
+}
+
+export interface FreeSwitchPrivateEvents {
+  freeswitch_auth_request: (data: FreeSwitchParserData) => void
+  freeswitch_command_reply: (data: FreeSwitchParserData) => void
+  freeswitch_api_response: (data: FreeSwitchParserData) => void
+  freeswitch_disconnect_notice: (data: FreeSwitchParserData) => void
+}
+
+export interface FreeSwitchPublicResponseEvents {
   CUSTOM: (data: FreeSwitchEventData) => void
   CLONE: (data: FreeSwitchEventData) => void
   CHANNEL_CREATE: (data: FreeSwitchEventData) => void
@@ -264,25 +260,11 @@ export interface FreeSwitchResponseEvents {
   TEXT: (data: FreeSwitchEventData) => void
   SHUTDOWN_REQUESTED: (data: FreeSwitchEventData) => void
   ALL: (data: FreeSwitchEventData) => void
-
-  /* private */
-  freeswitch_auth_request: (data: { headers: Headers; body: Buffer }) => void
-  freeswitch_command_reply: (data: { headers: Headers; body: Buffer }) => void
-  freeswitch_api_response: (data: { headers: Headers; body: Buffer }) => void
 }
-
-interface ErrorSignalEvents {
-  abort: () => void
-}
-
-type ErrorSignalEventEmitter = FreeSwitchEventEmitter<
-  keyof ErrorSignalEvents,
-  ErrorSignalEvents
->
 
 export class FreeSwitchResponse extends FreeSwitchEventEmitter<
-  keyof FreeSwitchResponseEvents,
-  FreeSwitchResponseEvents
+  keyof FreeSwitchPublicResponseEvents,
+  FreeSwitchPublicResponseEvents
 > {
   public closed: boolean = true
 
@@ -291,7 +273,22 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   private readonly __socket: Socket
   private readonly logger: FreeSwitchResponseLogger
   private __queue: Promise<true>
-  private readonly errorSignal: ErrorSignalEventEmitter
+  private readonly errorSignal: AbortSignalEventEmitter
+
+  public readonly socketEventEmitter: FreeSwitchEventEmitter<
+    keyof FreeSwitchSocketEvents,
+    FreeSwitchSocketEvents
+  >
+
+  private readonly privateEventEmitter: FreeSwitchEventEmitter<
+    keyof FreeSwitchPrivateEvents,
+    FreeSwitchPrivateEvents
+  >
+
+  public readonly parserEventEmitter: FreeSwitchEventEmitter<
+    keyof FreeSwitchParserEvents,
+    FreeSwitchParserEvents
+  >
 
   // The module provides statistics in the `stats` object if it is initialized. You may use it  to collect your own call-related statistics.
   public stats: {
@@ -330,6 +327,16 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
 
     this.__socket = socket
     this.logger = logger
+    this.errorSignal = new FreeSwitchEventEmitter()
+    this.socketEventEmitter = new FreeSwitchEventEmitter()
+    this.privateEventEmitter = new FreeSwitchEventEmitter()
+    this.parserEventEmitter = new FreeSwitchEventEmitter()
+
+    // The object also provides a queue for operations which need to be submitted one after another on a given socket because FreeSwitch does not provide ways to map event socket requests and responses in the general case.
+    this.__queue = Promise.resolve(true)
+    // The object also provides a mechanism to report events that might already have been triggered.
+    // We also must track connection close in order to prevent writing to a closed socket.
+    this.closed = false
 
     this.on('CHANNEL_EXECUTE_COMPLETE', (res: FreeSwitchEventData) => {
       const eventUUID = res.body.applicationUUID
@@ -360,7 +367,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
         }
       }
     })
-    this.once('freeswitch_disconnect_notice', () => {
+    this.privateEventEmitter.once('freeswitch_disconnect_notice', () => {
       this.end('Received disconnect notice')
     })
 
@@ -373,7 +380,10 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
         this.logger.error('process failed', { err, ref: this.ref() })
       })
     }).then(
-      () => {
+      (outcome) => {
+        if (outcome instanceof FreeSwitchParserNonEmptyBufferAtEndError) {
+          this.parserEventEmitter.emit('error.buffer-not-empty-at-end', outcome)
+        }
         this.logger.info('Parser terminated', { ref: this.ref() })
       },
       (err: any) => {
@@ -381,33 +391,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
       }
     )
 
-    // The object also provides a queue for operations which need to be submitted one after another on a given socket because FreeSwitch does not provide ways to map event socket requests and responses in the general case.
-    this.__queue = Promise.resolve(true)
-    // The object also provides a mechanism to report events that might already have been triggered.
-    // We also must track connection close in order to prevent writing to a closed socket.
-    this.closed = false
-
-    const socketOnceCclose = (): void => {
-      this.logger.debug('FreeSwitchResponse: Socket closed', {
-        ref: this.__ref,
-      })
-      this.emit('socket.close', undefined)
-    }
-    this.__socket.once('close', socketOnceCclose)
-
-    // Default handler for `error` events to prevent `Unhandled 'error' event` reports.
-    const socketOnError = (err: Error): void => {
-      this.logger.debug('FreeSwitchResponse: Socket Error', {
-        ref: this.__ref,
-        error: err,
-      })
-      this.emit('socket.error', err)
-    }
-    this.__socket.on('error', socketOnError)
-
     // After the socket is closed or errored, this object is no longer usable.
-    this.errorSignal = new FreeSwitchEventEmitter()
-
     const onceSocketStar = (reason?: string | Error): void => {
       this.logger.debug('FreeSwitchResponse: Terminate', {
         ref: this.__ref,
@@ -421,10 +405,32 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
       this.removeAllListeners()
       this.__queue = Promise.resolve(true)
     }
-    this.once('socket.error', onceSocketStar)
-    this.once('socket.close', onceSocketStar)
-    this.once('socket.write', onceSocketStar)
-    this.once('socket.end', onceSocketStar)
+    this.socketEventEmitter.once('socket.error', onceSocketStar)
+    this.socketEventEmitter.once('socket.close', onceSocketStar)
+    this.socketEventEmitter.once('socket.write', onceSocketStar)
+    this.socketEventEmitter.once('socket.end', onceSocketStar)
+
+    /* Event handlers for the underlying socket */
+    const socketOnceCclose = (hadError: boolean): void => {
+      this.logger.debug('FreeSwitchResponse: Socket closed', {
+        ref: this.__ref,
+      })
+      this.socketEventEmitter.emit(
+        'socket.close',
+        new FreeSwitchClosedError(hadError ? 'on error' : 'on close')
+      )
+    }
+    this.__socket.once('close', socketOnceCclose)
+
+    // Default handler for `error` events to prevent `Unhandled 'error' event` reports.
+    const socketOnError = (err: Error): void => {
+      this.logger.debug('FreeSwitchResponse: Socket Error', {
+        ref: this.__ref,
+        error: err,
+      })
+      this.socketEventEmitter.emit('socket.error', err)
+    }
+    this.__socket.on('error', socketOnError)
   }
 
   ref(): string {
@@ -432,51 +438,57 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   }
 
   end(reason: string): void {
-    this.emit('socket.end', new Error(reason))
+    this.socketEventEmitter.emit('socket.end', new Error(reason))
   }
 
-  private async error<T>(
-    res: FreeSwitchEventData | { headers: Headers; body: Buffer } | undefined,
-    data: Record<string, string | JSONMap | undefined>
-  ): Promise<T> {
-    this.logger.error('FreeSwitchResponse: error: new FreeSwitchError', {
-      ref: this.__ref,
-      res,
-      data,
-    })
-    return await Promise.reject(new FreeSwitchError(res, data))
-  }
-
-  private async awaitSignal<V>(
+  private async awaitSignal<T>(
     timeout: number,
-    handler: (resolve: (v: V) => void) => () => void
-  ): Promise<V> {
-    return await new Promise<V>((resolve, reject) => {
+    signal: AbortSignalEventEmitter,
+    handler: (resolve: (v: T) => void) => () => void
+  ): Promise<
+    T | FreeSwitchClosedError | FreeSwitchTimeoutError | FreeSwitchAbortError
+  > {
+    return await new Promise((resolve) => {
       if (this.closed) {
-        reject(new FreeSwitchClosedError())
+        resolve(new FreeSwitchClosedError('before waiting'))
         return
       }
 
       const timeoutHandler = (): void => {
-        this.errorSignal.removeListener('abort', abortHandler)
+        // clearTimeout(timer)
+        this.errorSignal.removeListener('abort', errorAbortHandler)
+        signal.removeListener('abort', signalAbortHandler)
         canceler()
-        reject(new FreeSwitchTimeoutError(timeout, 'awaitSignal'))
+        resolve(new FreeSwitchTimeoutError(timeout, 'awaitSignal'))
       }
 
-      const abortHandler = (): void => {
+      const errorAbortHandler = (): void => {
         clearTimeout(timer)
+        // this.errorSignal.removeListener('abort', errorAbortHandler)
+        signal.removeListener('abort', signalAbortHandler)
         canceler()
-        reject(new FreeSwitchClosedError())
+        resolve(new FreeSwitchClosedError('while waiting'))
       }
 
-      const successHandler = (v: V): void => {
+      const signalAbortHandler = (): void => {
         clearTimeout(timer)
-        this.errorSignal.removeListener('abort', abortHandler)
+        this.errorSignal.removeListener('abort', errorAbortHandler)
+        // signal.removeListener('abort', signalAbortHandler)
+        canceler()
+        resolve(new FreeSwitchAbortError())
+      }
+
+      const successHandler = (v: T): void => {
+        clearTimeout(timer)
+        this.errorSignal.removeListener('abort', errorAbortHandler)
+        signal.removeListener('abort', signalAbortHandler)
+        // canceler()
         resolve(v)
       }
 
       const timer = setTimeout(timeoutHandler, timeout)
-      this.errorSignal.once('abort', abortHandler)
+      this.errorSignal.once('abort', errorAbortHandler)
+      signal.once('abort', signalAbortHandler)
       const canceler = handler(successHandler)
     })
   }
@@ -488,14 +500,25 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
 
   private async awaitExecuteComplete(
     eventUUID: string,
-    timeout: number
-  ): Promise<FreeSwitchEventData> {
-    return await this.awaitSignal<FreeSwitchEventData>(timeout, (resolve) => {
-      this.executeCompleteMap.set(eventUUID, resolve)
-      return () => {
-        this.executeCompleteMap.delete(eventUUID)
+    timeout: number,
+    signal: AbortSignalEventEmitter
+  ): Promise<
+    | FreeSwitchEventData
+    | FreeSwitchClosedError
+    | FreeSwitchTimeoutError
+    | FreeSwitchAbortError
+  > {
+    const p = this.awaitSignal<FreeSwitchEventData>(
+      timeout,
+      signal,
+      (resolve) => {
+        this.executeCompleteMap.set(eventUUID, resolve)
+        return () => {
+          this.executeCompleteMap.delete(eventUUID)
+        }
       }
-    })
+    )
+    return await p
   }
 
   private readonly backgroundJobMap = new Map<
@@ -505,26 +528,48 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
 
   private async awaitBackgroundJob(
     jobUUID: string,
-    timeout: number
-  ): Promise<FreeSwitchEventData> {
-    return await this.awaitSignal<FreeSwitchEventData>(timeout, (resolve) => {
-      this.backgroundJobMap.set(jobUUID, resolve)
-      return () => {
-        this.backgroundJobMap.delete(jobUUID)
+    timeout: number,
+    signal: AbortSignalEventEmitter
+  ): Promise<
+    | FreeSwitchEventData
+    | FreeSwitchClosedError
+    | FreeSwitchTimeoutError
+    | FreeSwitchAbortError
+  > {
+    const p = this.awaitSignal<FreeSwitchEventData>(
+      timeout,
+      signal,
+      (resolve) => {
+        this.backgroundJobMap.set(jobUUID, resolve)
+        return () => {
+          this.backgroundJobMap.delete(jobUUID)
+        }
       }
-    })
+    )
+    return await p
   }
 
-  async onceAsync<K extends keyof FreeSwitchResponseEvents>(
-    event: K,
-    timeout: number
-  ): Promise<Parameters<FreeSwitchResponseEvents[K]>[0]> {
-    return await this.awaitSignal(timeout, (resolve) => {
-      this.once(event, resolve)
-      return () => {
-        this.removeListener(event, resolve)
+  async oncePrivateAsync(
+    event: keyof FreeSwitchPrivateEvents,
+    timeout: number,
+    signal: AbortSignalEventEmitter
+  ): Promise<
+    | FreeSwitchParserData
+    | FreeSwitchClosedError
+    | FreeSwitchTimeoutError
+    | FreeSwitchAbortError
+  > {
+    const p = this.awaitSignal<FreeSwitchParserData>(
+      timeout,
+      signal,
+      (resolve) => {
+        this.privateEventEmitter.once(event, resolve)
+        return () => {
+          this.privateEventEmitter.removeListener(event, resolve)
+        }
       }
-    })
+    )
+    return await p
   }
 
   // Queueing
@@ -532,9 +577,9 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
 
   // Enqueue a function that returns a Promise.
   // The function is only called when all previously enqueued functions-that-return-Promises are completed and their respective Promises fulfilled or rejected.
-  async enqueue<T>(f: () => Promise<T>): Promise<T> {
+  async enqueue<T>(f: () => Promise<T>): Promise<T | FreeSwitchClosedError> {
     if (this.closed) {
-      return await Promise.reject(new FreeSwitchClosedError())
+      return new FreeSwitchClosedError('enqueuing')
     }
     const q = this.__queue
     const next = (async function () {
@@ -561,9 +606,12 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   //
 
   // Send a single command to FreeSwitch; `args` is a hash of headers sent with the command.
-  async write(command: string, headers: ValueMap): Promise<null> {
+  async write(
+    command: string,
+    headers: ValueMap
+  ): Promise<null | FreeSwitchClosedError> {
     if (this.closed) {
-      return await Promise.reject(new FreeSwitchClosedError())
+      return new FreeSwitchClosedError('before writing')
     }
     const writeHandler = (
       resolve: (v: null) => void,
@@ -611,10 +659,10 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
         })
         // Cancel any pending Promise started with `@onceAsync`, and close the connection.
         if (error instanceof Error) {
-          this.emit('socket.write', error)
+          this.socketEventEmitter.emit('socket.write', error)
         } else {
           // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-          this.emit('socket.write', new Error(`${error}`))
+          this.socketEventEmitter.emit('socket.write', new Error(`${error}`))
         }
         reject(error)
       }
@@ -628,15 +676,34 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   // A generic way of sending commands to FreeSwitch, wrapping `write` into a Promise that waits for FreeSwitch's notification that the command completed.
   async send(command: string, args: ValueMap, timeout: number): SendResult {
     if (this.closed) {
-      return await Promise.reject(new FreeSwitchClosedError())
+      return new FreeSwitchClosedError('before sending')
     }
     // Typically `command/reply` will contain the status in the `Reply-Text` header while `api/response` will contain the status in the body.
-    const msg = `send ${command} ${JSON.stringify(args)}`
-    const sendHandler = async (): Promise<FreeSwitchEventData> => {
-      const p = this.onceAsync('freeswitch_command_reply', timeout)
-      const q = this.write(command, args)
-      const [res] = await Promise.all([p, q])
-      const { headers, body } = res
+    const sendHandler = async (): Promise<
+      | FreeSwitchEventData
+      | FreeSwitchNoReplyError
+      | FreeSwitchFailedCommandError
+      | FreeSwitchClosedError
+      | FreeSwitchTimeoutError
+      | FreeSwitchAbortError
+    > => {
+      const signal = new FreeSwitchEventEmitter()
+      const p = this.oncePrivateAsync(
+        'freeswitch_command_reply',
+        timeout,
+        signal
+      )
+      const q = await this.write(command, args)
+      if (q instanceof Error) {
+        signal.emit('abort')
+        return q
+      }
+      const value = await p
+      if (value instanceof Error) {
+        return value
+      }
+
+      const { headers, body } = value
       this.logger.debug('FreeSwitchResponse: send: received reply', {
         ref: this.__ref,
         command,
@@ -647,17 +714,10 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
       const reply = headers.replyText
       // The Promise might fail if FreeSwitch's notification indicates an error.
       if (reply == null) {
-        return await this.error(res, {
-          when: 'no reply to command',
-          command,
-        })
+        return new FreeSwitchNoReplyError(command)
       }
-      if (reply.match(/^-/) != null) {
-        return await this.error(res, {
-          when: 'command reply indicates failure',
-          reply,
-          command,
-        })
+      if (reply.startsWith('-')) {
+        return new FreeSwitchFailedCommandError(command, reply)
       }
 
       let bodyData: JSONValue | undefined
@@ -688,9 +748,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
 
       return { headers, body: newBody }
     }
-    return await this.enqueue(
-      asyncLog(msg, this.ref(), sendHandler, this.logger)
-    )
+    return await this.enqueue(sendHandler)
   }
 
   // Process data from the parser
@@ -706,7 +764,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
         headers,
         body,
       })
-      this.emit(
+      this.parserEventEmitter.emit(
         'error.missing-content-type',
         new FreeSwitchMissingContentTypeError(headers, body)
       )
@@ -721,7 +779,10 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
       // Normally caught by the client code, there is no need for your code to monitor this event.
       case 'auth/request': {
         this.stats.auth_request++
-        this.emit('freeswitch_auth_request', { headers, body })
+        this.privateEventEmitter.emit('freeswitch_auth_request', {
+          headers,
+          body,
+        })
         return
       }
 
@@ -732,7 +793,10 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
       // Normally caught by `send`, there is no need for your code to monitor this event.
       case 'command/reply': {
         this.stats.command_reply++
-        this.emit('freeswitch_command_reply', { headers, body })
+        this.privateEventEmitter.emit('freeswitch_command_reply', {
+          headers,
+          body,
+        })
         return
       }
 
@@ -756,11 +820,13 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
             body,
           })
           this.stats.json_parse_errors++
-          if (exception instanceof Error) {
-            this.emit('error.invalid-json', exception)
+          if (exception instanceof SyntaxError) {
+            this.parserEventEmitter.emit('error.invalid-json', exception)
           } else {
-            // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-            this.emit('error.invalid-json', new Error(`${exception}`))
+            this.logger.error('Unknown JSON parsing error', {
+              ref: this.__ref,
+              exception,
+            })
           }
           return
         }
@@ -772,7 +838,10 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
           typeof bodyValues === 'boolean' ||
           Array.isArray(bodyValues)
         ) {
-          this.emit('error.invalid-json', new Error(body.toString()))
+          this.parserEventEmitter.emit(
+            'error.invalid-json',
+            new Error(body.toString())
+          )
           return
         }
 
@@ -790,7 +859,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
             }
           )
           this.stats.missing_event_name++
-          this.emit(
+          this.parserEventEmitter.emit(
             'error.missing-event-name',
             new FreeSwitchMissingEventNameError(headers, body)
           )
@@ -818,7 +887,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
             }
           )
           this.stats.missing_event_name++
-          this.emit(
+          this.parserEventEmitter.emit(
             'error.missing-event-name',
             new FreeSwitchMissingEventNameError(headers, body)
           )
@@ -830,7 +899,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
       // --------
       case 'log/data': {
         this.stats.log_data++
-        this.emit('freeswitch_log_data', { headers, body })
+        this.parserEventEmitter.emit('freeswitch_log_data', { headers, body })
         return
       }
 
@@ -840,7 +909,10 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
       // FreeSwitch's indication that it is disconnecting the socket.
       case 'text/disconnect-notice': {
         this.stats.disconnect++
-        this.emit('freeswitch_disconnect_notice', { headers, body })
+        this.privateEventEmitter.emit('freeswitch_disconnect_notice', {
+          headers,
+          body,
+        })
         return
       }
 
@@ -874,7 +946,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
           contentType,
         })
         this.stats.unhandled++
-        this.emit(
+        this.parserEventEmitter.emit(
           'error.unhandled-content-type',
           new FreeSwitchUnhandledContentTypeError(contentType)
         )
@@ -893,12 +965,29 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
    *  However it will not throw if the background job failed. You can check the response
    *  from the background job in the `response` field of the return value.
    */
-  async bgapi(command: string, timeout: number): SendResult {
+  async bgapi(
+    command: string,
+    timeout: number
+  ): Promise<
+    | FreeSwitchEventData
+    | FreeSwitchNoReplyError
+    | FreeSwitchTimeoutError
+    | FreeSwitchClosedError
+    | FreeSwitchAbortError
+  > {
+    const signal = new FreeSwitchEventEmitter()
     const jobUUID = ulid()
-    const p = this.awaitBackgroundJob(jobUUID, timeout)
-    const q = this.send(`bgapi ${command}`, { 'job-uuid': jobUUID }, timeout)
-    const r = await Promise.all([p, q])
-    return r[0]
+    const p = this.awaitBackgroundJob(jobUUID, timeout, signal)
+    const q = await this.send(
+      `bgapi ${command}`,
+      { 'job-uuid': jobUUID },
+      timeout
+    )
+    if (q instanceof Error) {
+      signal.emit('abort')
+      return q
+    }
+    return await p
   }
 
   // Event reception and filtering
@@ -1063,14 +1152,24 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
     appName: string,
     appArg: string = '',
     timeout: number
-  ): SendResult {
+  ): Promise<
+    | FreeSwitchEventData
+    | FreeSwitchClosedError
+    | FreeSwitchNoReplyError
+    | FreeSwitchTimeoutError
+    | FreeSwitchAbortError
+  > {
+    const signal: AbortSignalEventEmitter = new FreeSwitchEventEmitter()
     const eventUUID: string = ulid()
-    const p = this.awaitExecuteComplete(eventUUID, timeout)
-    const q = this.execute_uuid(uuid, appName, appArg, {
+    const p = this.awaitExecuteComplete(eventUUID, timeout, signal)
+    const q = await this.execute_uuid(uuid, appName, appArg, {
       'event-uuid': eventUUID,
     })
-    const r = await Promise.all([p, q])
-    return r[0]
+    if (q instanceof Error) {
+      signal.emit('abort')
+      return q
+    }
+    return await p
   }
 
   // hangup_uuid

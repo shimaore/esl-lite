@@ -91,8 +91,12 @@ test('should handle UUID-based commands', async function (t) {
     `originate {origination_uuid=${originationUUID},origination_channel_name='1234'}sofia/test-server/sip:answer-wait-30000@${domain} &park`,
     20000
   )
-  t.log(res1.body.response)
-  t.is(res1.body.response, `+OK ${originationUUID}\n`)
+  if (res1 instanceof Error) {
+    t.fail(res1.message)
+  } else {
+    t.log(res1.body.response)
+    t.is(res1.body.response, `+OK ${originationUUID}\n`)
+  }
   await sleep(1000)
   const res2 = await call.command_uuid(
     originationUUID,
@@ -100,7 +104,11 @@ test('should handle UUID-based commands', async function (t) {
     undefined,
     1000
   )
-  t.is(res2.body.data['Hangup-Cause'], 'NORMAL_CLEARING')
+  if (res2 instanceof Error) {
+    t.fail(res2.message)
+  } else {
+    t.is(res2.body.data['Hangup-Cause'], 'NORMAL_CLEARING')
+  }
   client.end()
 })
 
@@ -112,13 +120,21 @@ test('should map sequential responses', async function (t) {
   client.connect()
   const call = await onceConnected(client)
   const res1 = await call.bgapi('create_uuid', 100)
-  const uuid1 = res1.body.response
-  const res2 = await call.bgapi('create_uuid', 100)
-  const uuid2 = res2.body.response
+  if (res1 instanceof Error) {
+    t.fail(res1.message)
+  } else {
+    const uuid1 = res1.body.response
+    const res2 = await call.bgapi('create_uuid', 100)
+    if (res2 instanceof Error) {
+      t.fail(res2.message)
+    } else {
+      const uuid2 = res2.body.response
+      t.is(typeof uuid1, 'string')
+      t.is(typeof uuid2, 'string')
+      t.not(uuid1, uuid2, 'UUIDs should be unique')
+    }
+  }
   client.end()
-  t.is(typeof uuid1, 'string')
-  t.is(typeof uuid2, 'string')
-  t.not(uuid1, uuid2, 'UUIDs should be unique')
 })
 
 test('should map sequential responses (using bgapi)', async function (t) {
@@ -129,11 +145,19 @@ test('should map sequential responses (using bgapi)', async function (t) {
   client.connect()
   const call = await onceConnected(client)
   const res1 = await call.bgapi('create_uuid', 100)
-  const uuid1 = res1.body.response
-  const res2 = await call.bgapi('create_uuid', 100)
-  const uuid2 = res2.body.response
+  if (res1 instanceof Error) {
+    t.fail(res1.message)
+  } else {
+    const uuid1 = res1.body.response
+    const res2 = await call.bgapi('create_uuid', 100)
+    if (res2 instanceof Error) {
+      t.fail(res2.message)
+    } else {
+      const uuid2 = res2.body.response
+      t.not(uuid1, uuid2, 'UUIDs should be unique')
+    }
+  }
   client.end()
-  t.not(uuid1, uuid2, 'UUIDs should be unique')
 })
 
 test('should map sequential responses (sent in parallel)', async function (t) {
@@ -146,6 +170,9 @@ test('should map sequential responses (sent in parallel)', async function (t) {
   let uuid1: string | undefined
   let uuid2: string | undefined
   const p1 = call.bgapi('create_uuid', 200).then((res): null => {
+    if (res instanceof Error) {
+      return t.fail(res.message)
+    }
     t.is(typeof res.body.response, 'string')
     if (typeof res.body.response === 'string') {
       uuid1 = res.body.response
@@ -153,6 +180,9 @@ test('should map sequential responses (sent in parallel)', async function (t) {
     return null
   })
   const p2 = call.bgapi('create_uuid', 200).then((res): null => {
+    if (res instanceof Error) {
+      return t.fail(res.message)
+    }
     t.is(typeof res.body.response, 'string')
     if (typeof res.body.response === 'string') {
       uuid2 = res.body.response
@@ -176,11 +206,17 @@ test('should work with parallel responses (using bgapi)', async function (t) {
   let uuid1 = null
   let uuid2 = null
   const p1 = call.bgapi('create_uuid', 100).then((res): null => {
+    if (res instanceof Error) {
+      return t.fail(res.message)
+    }
     t.is(typeof res.body.response, 'string')
     uuid1 = res.body.response
     return null
   })
   const p2 = call.bgapi('create_uuid', 100).then((res): null => {
+    if (res instanceof Error) {
+      return t.fail(res.message)
+    }
     t.is(typeof res.body.response, 'string')
     uuid2 = res.body.response
     return null
@@ -219,6 +255,9 @@ test('should handle errors', async function (t) {
     const duration = now - ref
     t.true(duration > 1000000000n)
     t.true(duration < 1200000000n)
+    if (res instanceof Error) {
+      return t.fail(res.message)
+    }
     t.like(res.body.data, {
       'Answer-State': 'hangup',
       'Hangup-Cause': 'NO_PICKUP',
@@ -278,6 +317,9 @@ test.skip('should detect DTMF', async function (t) {
           `originate sofia/test-server/sip:server7012@${domain} &park`,
           9000
         )
+        if (msg instanceof Error) {
+          return t.fail(msg.message)
+        }
         const $ = (msg.headers.replyText ?? 'NONE').match(/\+OK ([\da-f-]+)/)
         if ($ != null) {
           const channelUUID = $[1]

@@ -3,13 +3,9 @@
 import { type Socket } from 'node:net'
 import { Headers } from './headers.js'
 
-export class FreeSwitchParserError extends Error {
-  public readonly error: string
-  public readonly buffer: Buffer
-  constructor(error: string, buffer: Buffer) {
-    super(JSON.stringify({ error, buffer }))
-    this.error = error
-    this.buffer = buffer
+export class FreeSwitchParserNonEmptyBufferAtEndError extends Error {
+  constructor(public readonly buffer: Buffer) {
+    super(JSON.stringify({ buffer }))
   }
 }
 
@@ -18,7 +14,7 @@ type Processor = (headers: Headers, body: Buffer) => void
 export const FreeSwitchParser = async (
   socket: Socket,
   processMessage: Processor
-): Promise<void> => {
+): Promise<undefined | FreeSwitchParserNonEmptyBufferAtEndError> => {
   let bodyLength: number = 0
   let buffers: Buffer[] = []
   let buffersLength: number = 0
@@ -95,14 +91,9 @@ export const FreeSwitchParser = async (
   })
 
   if (buffersLength > 0) {
-    socket.emit(
-      'warning',
-      new FreeSwitchParserError(
-        'Buffer is not empty at end of stream',
-        Buffer.concat(buffers)
-      )
-    )
+    return new FreeSwitchParserNonEmptyBufferAtEndError(Buffer.concat(buffers))
   }
+  return undefined
 }
 
 // Headers parser

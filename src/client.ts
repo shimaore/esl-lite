@@ -9,7 +9,7 @@ import { Socket } from 'node:net'
 import { FreeSwitchEventEmitter } from './event-emitter.js'
 
 import { FreeSwitchResponse } from './response.js'
-import { type FreeSwitchParserError } from './parser.js'
+import { type FreeSwitchParserNonEmptyBufferAtEndError } from './parser.js'
 
 const defaultPassword = 'ClueCon'
 
@@ -24,7 +24,7 @@ export interface FreeSwitchClientLogger {
 interface FreeSwitchClientEvents {
   connect: (call: FreeSwitchResponse) => void
   error: (error: unknown) => void
-  warning: (data: FreeSwitchParserError) => void
+  warning: (data: FreeSwitchParserNonEmptyBufferAtEndError) => void
   reconnecting: (retry_timeout: number) => void
   end: () => void
 }
@@ -90,25 +90,49 @@ export class FreeSwitchClient extends FreeSwitchEventEmitter<
     const socket = new Socket()
     this.current_call = new FreeSwitchResponse(socket, this.logger)
     const reconnect = this.connect.bind(this)
+    const reconnectMaybe = (): void => {
+      if (this.running) {
+        this.emit('reconnecting', this.retry)
+        setTimeout(reconnect, this.retry)
+      }
+    }
+
     socket.once('connect', () => {
-      void (async (): Promise<void> => {
-        try {
-          // Normally when the client connects, FreeSwitch will first send us an authentication request. We use it to trigger the remainder of the stack.
-          await this.current_call?.onceAsync('freeswitch_auth_request', 20_000)
-          await this.current_call?.auth(this.options.password)
-          await this.current_call?.event_json([
-            'CHANNEL_EXECUTE_COMPLETE',
-            'BACKGROUND_JOB',
-          ])
-        } catch (error) {
-          this.logger.error('FreeSwitchClient: connect error', error)
-          this.emit('error', error)
+      const signal = new FreeSwitchEventEmitter()
+      ;(async (): Promise<void> => {
+        // Normally when the client connects, FreeSwitch will first send us an authentication request. We use it to trigger the remainder of the stack.
+        const r1 = await this.current_call?.oncePrivateAsync(
+          'freeswitch_auth_request',
+          20_000,
+          signal
+        )
+        if (r1 instanceof Error) {
+          reconnectMaybe()
+          return
+        }
+        const r2 = await this.current_call?.auth(this.options.password)
+        if (r2 instanceof Error) {
+          reconnectMaybe()
+          return
+        }
+        const r3 = await this.current_call?.event_json([
+          'CHANNEL_EXECUTE_COMPLETE',
+          'BACKGROUND_JOB',
+        ])
+        if (r3 instanceof Error) {
+          reconnectMaybe()
+          return
         }
         if (this.running && this.current_call != null) {
           this.emit('connect', this.current_call)
         }
-      })()
+      })().catch((err: unknown) => {
+        signal.emit('abort')
+        this.logger.error('FreeSwitchClient: internal error', err)
+        reconnectMaybe()
+      })
     })
+
     socket.once('error', (error) => {
       const code = 'code' in error ? error.code : undefined
       if (this.retry < 5000) {
@@ -125,19 +149,22 @@ export class FreeSwitchClient extends FreeSwitchEventEmitter<
         setTimeout(reconnect, this.retry)
       }
     })
+
     socket.once('end', () => {
       this.logger.debug(
         'FreeSwitchClient::connect: client received `end` event (remote end sent a FIN packet)',
         { attempt: this.attempt, retry: this.retry }
       )
-      if (this.running) {
-        this.emit('reconnecting', this.retry)
-        setTimeout(reconnect, this.retry)
+      reconnectMaybe()
+    })
+
+    this.current_call.parserEventEmitter.once(
+      'error.buffer-not-empty-at-end',
+      (data: FreeSwitchParserNonEmptyBufferAtEndError) => {
+        this.emit('warning', data)
       }
-    })
-    socket.on('warning', (data: FreeSwitchParserError) => {
-      this.emit('warning', data)
-    })
+    )
+
     try {
       this.logger.debug('FreeSwitchClient::connect: socket.connect', {
         options: this.options,
