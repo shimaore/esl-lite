@@ -1223,5 +1223,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
 
   // Not implemented yet (TODO).
 
+  // switch_ivr.c also lists `xferext` in `switch_ivr_parse_event`.
+
   localTimeout = 1_000
 }
