@@ -1,6 +1,9 @@
 // Response and associated API
 // ===========================
-import { FreeSwitchEventEmitter } from './event-emitter.js'
+import {
+  AbortSignalEventEmitter,
+  FreeSwitchEventEmitter,
+} from './event-emitter.js'
 
 import { ulid } from 'ulidx'
 
@@ -16,7 +19,7 @@ import { type JSONValue } from './json-value.js'
 import { Body } from './body.js'
 
 // @ts-expect-error @types/node does not know that JSON.parse accepts Buffer.
-const jsonParseBuffer = (b: Buffer): JSONValue => JSON.parse(b)
+const jsonParseBuffer = (b: Buffer): JSONValue => JSON.parse(b) as JSONValue
 
 type ResponseLogger = (
   msg: string,
@@ -56,6 +59,12 @@ export class FreeSwitchMissingContentTypeError extends Error {
     public readonly body: Buffer
   ) {
     super('FreeSwitchMissingContentTypeError')
+  }
+}
+
+export class FreeSwitchInvalidBodyError extends Error {
+  constructor(public readonly body: string) {
+    super('FreeSwitchInvalidBodyError')
   }
 }
 
@@ -104,14 +113,11 @@ export class FreeSwitchAbortError extends Error {
   }
 }
 
-interface AbortSignalEvents {
-  abort: () => void
+export class FreeSwitchEndReason extends Error {
+  constructor(reason: string) {
+    super(`FreeSwitchEndReason: ${reason}`)
+  }
 }
-
-type AbortSignalEventEmitter = FreeSwitchEventEmitter<
-  keyof AbortSignalEvents,
-  AbortSignalEvents
->
 
 export interface FreeSwitchEventData {
   /** Headers */
@@ -130,7 +136,6 @@ type SendResult = Promise<
   | FreeSwitchClosedError
   | FreeSwitchNoReplyError
   | FreeSwitchFailedCommandError
-  | FreeSwitchClosedError
   | FreeSwitchTimeoutError
   | FreeSwitchAbortError
 >
@@ -140,23 +145,23 @@ export interface FreeSwitchParserEvents {
   // we should support all content-types reported by mod_event_socket at this
   // time.
 
-  'error.missing-content-type': (err: FreeSwitchMissingContentTypeError) => void
-  'error.unhandled-content-type': (
-    err: FreeSwitchUnhandledContentTypeError
+  error: (
+    err:
+      | FreeSwitchMissingContentTypeError
+      | FreeSwitchUnhandledContentTypeError
+      | SyntaxError
+      | FreeSwitchInvalidBodyError
+      | FreeSwitchMissingEventNameError
+      | FreeSwitchParserNonEmptyBufferAtEndError
   ) => void
-  'error.invalid-json': (err: Error) => void
-  'error.missing-event-name': (err: FreeSwitchMissingEventNameError) => void
   freeswitch_log_data: (data: FreeSwitchParserData) => void
-  'error.buffer-not-empty-at-end': (
-    err: FreeSwitchParserNonEmptyBufferAtEndError
-  ) => void
 }
 
 export interface FreeSwitchSocketEvents {
-  'socket.close': (err: FreeSwitchClosedError) => void
-  'socket.error': (err: Error) => void
-  'socket.write': (err: Error) => void
-  'socket.end': (err: Error) => void
+  close: (err: FreeSwitchClosedError) => void
+  error: (err: Error) => void
+  write: (err: Error) => void
+  end: (err: FreeSwitchEndReason) => void
 }
 
 export interface FreeSwitchPrivateEvents {
@@ -266,7 +271,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   keyof FreeSwitchPublicResponseEvents,
   FreeSwitchPublicResponseEvents
 > {
-  public closed: boolean = true
+  public closed = true
 
   // Uniquely identify each instance, for tracing purposes.
   private readonly __ref: string = ulid()
@@ -275,7 +280,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   private __queue: Promise<true>
   private readonly errorSignal: AbortSignalEventEmitter
 
-  public readonly socketEventEmitter: FreeSwitchEventEmitter<
+  private readonly socketEventEmitter: FreeSwitchEventEmitter<
     keyof FreeSwitchSocketEvents,
     FreeSwitchSocketEvents
   >
@@ -382,11 +387,11 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
     }).then(
       (outcome) => {
         if (outcome instanceof FreeSwitchParserNonEmptyBufferAtEndError) {
-          this.parserEventEmitter.emit('error.buffer-not-empty-at-end', outcome)
+          this.parserEventEmitter.emit('error', outcome)
         }
         this.logger.info('Parser terminated', { ref: this.ref() })
       },
-      (err: any) => {
+      (err: unknown) => {
         this.logger.error('Parser crashed', { err, ref: this.ref() })
       }
     )
@@ -401,14 +406,14 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
         this.closed = true
         this.__socket.end()
       }
-      this.errorSignal.emit('abort')
+      this.errorSignal.emit('abort', undefined)
       this.removeAllListeners()
       this.__queue = Promise.resolve(true)
     }
-    this.socketEventEmitter.once('socket.error', onceSocketStar)
-    this.socketEventEmitter.once('socket.close', onceSocketStar)
-    this.socketEventEmitter.once('socket.write', onceSocketStar)
-    this.socketEventEmitter.once('socket.end', onceSocketStar)
+    this.socketEventEmitter.once('error', onceSocketStar)
+    this.socketEventEmitter.once('close', onceSocketStar)
+    this.socketEventEmitter.once('write', onceSocketStar)
+    this.socketEventEmitter.once('end', onceSocketStar)
 
     /* Event handlers for the underlying socket */
     const socketOnceCclose = (hadError: boolean): void => {
@@ -416,7 +421,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
         ref: this.__ref,
       })
       this.socketEventEmitter.emit(
-        'socket.close',
+        'close',
         new FreeSwitchClosedError(hadError ? 'on error' : 'on close')
       )
     }
@@ -428,7 +433,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
         ref: this.__ref,
         error: err,
       })
-      this.socketEventEmitter.emit('socket.error', err)
+      this.socketEventEmitter.emit('error', err)
     }
     this.__socket.on('error', socketOnError)
   }
@@ -438,7 +443,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   }
 
   end(reason: string): void {
-    this.socketEventEmitter.emit('socket.end', new Error(reason))
+    this.socketEventEmitter.emit('end', new FreeSwitchEndReason(reason))
   }
 
   private async awaitSignal<T>(
@@ -643,13 +648,10 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
         const flushed = this.__socket.write(text, 'utf8')
         if (!flushed) {
           this.stats.unflushedWrites++
-          this.logger.debug('FreeSwitchResponse: write did not flush', {
-            ref: this.__ref,
-            command,
-            headers,
-          })
+          this.__socket.once('drain', resolve)
+        } else {
+          process.nextTick(resolve)
         }
-        resolve(null)
       } catch (error) {
         this.logger.error('FreeSwitchResponse: write error', {
           ref: this.__ref,
@@ -659,10 +661,10 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
         })
         // Cancel any pending Promise started with `@onceAsync`, and close the connection.
         if (error instanceof Error) {
-          this.socketEventEmitter.emit('socket.write', error)
+          this.socketEventEmitter.emit('write', error)
         } else {
           // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-          this.socketEventEmitter.emit('socket.write', new Error(`${error}`))
+          this.socketEventEmitter.emit('write', new Error(`${error}`))
         }
         reject(error)
       }
@@ -687,7 +689,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
       | FreeSwitchTimeoutError
       | FreeSwitchAbortError
     > => {
-      const signal = new FreeSwitchEventEmitter()
+      const signal: AbortSignalEventEmitter = new FreeSwitchEventEmitter()
       const p = this.oncePrivateAsync(
         'freeswitch_command_reply',
         timeout,
@@ -695,7 +697,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
       )
       const q = await this.write(command, args)
       if (q instanceof Error) {
-        signal.emit('abort')
+        signal.emit('abort', undefined)
         return q
       }
       const value = await p
@@ -759,13 +761,8 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
     const contentType = headers.contentType
     if (contentType == null) {
       this.stats.missing_contentType++
-      this.logger.error('FreeSwitchResponse::process: missing-content-type', {
-        ref: this.__ref,
-        headers,
-        body,
-      })
       this.parserEventEmitter.emit(
-        'error.missing-content-type',
+        'error',
         new FreeSwitchMissingContentTypeError(headers, body)
       )
       return
@@ -814,18 +811,13 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
           bodyValues = jsonParseBuffer(body)
         } catch (exception) {
           // In case of error report it as an error.
-          this.logger.error('process: Invalid JSON', {
-            ref: this.__ref,
-            headers,
-            body,
-          })
           this.stats.json_parse_errors++
           if (exception instanceof SyntaxError) {
-            this.parserEventEmitter.emit('error.invalid-json', exception)
+            this.parserEventEmitter.emit('error', exception)
           } else {
             this.logger.error('Unknown JSON parsing error', {
               ref: this.__ref,
-              exception,
+              err: exception,
             })
           }
           return
@@ -839,8 +831,8 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
           Array.isArray(bodyValues)
         ) {
           this.parserEventEmitter.emit(
-            'error.invalid-json',
-            new Error(body.toString())
+            'error',
+            new FreeSwitchInvalidBodyError(body.toString())
           )
           return
         }
@@ -851,16 +843,9 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
         if (typeof newEvent === 'string' && isEventName(newEvent)) {
           this.emit(newEvent, { headers, body: newBody })
         } else {
-          this.logger.error(
-            'FreeSwitchResponse: Missing or unknown event name',
-            {
-              ref: this.__ref,
-              body,
-            }
-          )
           this.stats.missing_event_name++
           this.parserEventEmitter.emit(
-            'error.missing-event-name',
+            'error',
             new FreeSwitchMissingEventNameError(headers, body)
           )
         }
@@ -879,16 +864,9 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
           const msg = { headers, body: newBody }
           this.emit(newEvent, msg)
         } else {
-          this.logger.error(
-            'FreeSwitchResponse: Missing or unknown event name',
-            {
-              ref: this.__ref,
-              body,
-            }
-          )
           this.stats.missing_event_name++
           this.parserEventEmitter.emit(
-            'error.missing-event-name',
+            'error',
             new FreeSwitchMissingEventNameError(headers, body)
           )
         }
@@ -941,13 +919,9 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
         // Ideally other content-types should be individually specified. In any case we provide a fallback mechanism.
         // Others?
         // -------
-        this.logger.error('FreeSwitchResponse: Unhandled Content-Type', {
-          ref: this.__ref,
-          contentType,
-        })
         this.stats.unhandled++
         this.parserEventEmitter.emit(
-          'error.unhandled-content-type',
+          'error',
           new FreeSwitchUnhandledContentTypeError(contentType)
         )
       }
@@ -975,7 +949,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
     | FreeSwitchClosedError
     | FreeSwitchAbortError
   > {
-    const signal = new FreeSwitchEventEmitter()
+    const signal: AbortSignalEventEmitter = new FreeSwitchEventEmitter()
     const jobUUID = ulid()
     const p = this.awaitBackgroundJob(jobUUID, timeout, signal)
     const q = await this.send(
@@ -984,7 +958,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
       timeout
     )
     if (q instanceof Error) {
-      signal.emit('abort')
+      signal.emit('abort', undefined)
       return q
     }
     return await p
@@ -1150,7 +1124,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   async command_uuid(
     uuid: string,
     appName: string,
-    appArg: string = '',
+    appArg = '',
     timeout: number
   ): Promise<
     | FreeSwitchEventData
@@ -1166,7 +1140,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
       'event-uuid': eventUUID,
     })
     if (q instanceof Error) {
-      signal.emit('abort')
+      signal.emit('abort', undefined)
       return q
     }
     return await p

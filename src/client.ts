@@ -6,10 +6,13 @@
 
 import { Socket } from 'node:net'
 
-import { FreeSwitchEventEmitter } from './event-emitter.js'
+import {
+  AbortSignalEventEmitter,
+  FreeSwitchEventEmitter,
+} from './event-emitter.js'
 
 import { FreeSwitchResponse } from './response.js'
-import { type FreeSwitchParserNonEmptyBufferAtEndError } from './parser.js'
+import { FreeSwitchParserNonEmptyBufferAtEndError } from './parser.js'
 
 const defaultPassword = 'ClueCon'
 
@@ -40,9 +43,9 @@ export class FreeSwitchClient extends FreeSwitchEventEmitter<
   }
 
   private current_call: FreeSwitchResponse | undefined = undefined
-  private running: boolean = true
-  private retry: number = 200
-  private attempt: bigint = 0n
+  private running = true
+  private retry = 200
+  private attempt = 0n
   private readonly logger: FreeSwitchClientLogger
   /**
    * Create a new client that will attempt to connect to a FreeSWITCH Event Socket.
@@ -98,7 +101,7 @@ export class FreeSwitchClient extends FreeSwitchEventEmitter<
     }
 
     socket.once('connect', () => {
-      const signal = new FreeSwitchEventEmitter()
+      const signal: AbortSignalEventEmitter = new FreeSwitchEventEmitter()
       ;(async (): Promise<void> => {
         // Normally when the client connects, FreeSwitch will first send us an authentication request. We use it to trigger the remainder of the stack.
         const r1 = await this.current_call?.oncePrivateAsync(
@@ -127,7 +130,7 @@ export class FreeSwitchClient extends FreeSwitchEventEmitter<
           this.emit('connect', this.current_call)
         }
       })().catch((err: unknown) => {
-        signal.emit('abort')
+        signal.emit('abort', undefined)
         this.logger.error('FreeSwitchClient: internal error', err)
         reconnectMaybe()
       })
@@ -158,12 +161,11 @@ export class FreeSwitchClient extends FreeSwitchEventEmitter<
       reconnectMaybe()
     })
 
-    this.current_call.parserEventEmitter.once(
-      'error.buffer-not-empty-at-end',
-      (data: FreeSwitchParserNonEmptyBufferAtEndError) => {
+    this.current_call.parserEventEmitter.on('error', (data) => {
+      if (data instanceof FreeSwitchParserNonEmptyBufferAtEndError) {
         this.emit('warning', data)
       }
-    )
+    })
 
     try {
       this.logger.debug('FreeSwitchClient::connect: socket.connect', {
@@ -183,7 +185,7 @@ export class FreeSwitchClient extends FreeSwitchEventEmitter<
     this.logger.debug('FreeSwitchClient::end: end requested by application.', {
       attempt: this.attempt,
     })
-    this.emit('end')
+    this.emit('end', undefined)
     this.running = false
     if (this.current_call != null) {
       this.current_call.end('End requested by application')

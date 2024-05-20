@@ -40,7 +40,7 @@ test.before(async function (t) {
     { data }: { data: legacyESL.StringMap }
   ): void {
     const destination = data['variable_sip_req_user']
-    let m: any
+    const m = destination?.match(/^wait-(\d+)-respond-(\d+)$/)
     DoCatch(t, async () => {
       switch (false) {
         case destination !== 'answer-wait-3010':
@@ -58,7 +58,7 @@ test.before(async function (t) {
           })
           await sleep(9999)
           break
-        case (m = destination?.match(/^wait-(\d+)-respond-(\d+)$/)) == null:
+        case m == null:
           if (
             m != null &&
             typeof m[1] === 'string' &&

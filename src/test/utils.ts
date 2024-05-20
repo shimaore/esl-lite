@@ -34,7 +34,7 @@ export const clientLogger = function (
 ): FreeSwitchClientLogger {
   return {
     // debug: (msg, obj) => { t.log('clientLogger:debug', msg, obj) },
-    debug: (_msg, _obj) => {},
+    debug: () => {},
     info: (msg, obj) => {
       t.log('clientLogger:info', msg, obj)
     },
@@ -49,7 +49,7 @@ export const serverLogger = function (
 ): FreeSwitchClientLogger {
   return {
     // debug: (msg, obj) => { t.log('serverLogger:debug', msg, obj) },
-    debug: (_msg, _obj) => {},
+    debug: () => {},
     info: (msg, obj) => {
       t.log('serverLogger:info', msg, obj)
     },
@@ -64,7 +64,7 @@ export const responseLogger = function (
 ): legacyESL.FreeSwitchResponseLogger {
   return {
     // debug: (msg, obj) => { t.log('responseLogger:debug', msg, obj) },
-    debug: (_msg, _obj) => {},
+    debug: () => {},
     info: (msg, obj) => {
       t.log('responseLogger:info', msg, obj)
     },

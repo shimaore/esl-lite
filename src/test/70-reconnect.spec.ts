@@ -53,7 +53,9 @@ Content-Length: 0
                 t.log('Server run #3 end')
                 try {
                   client.end()
-                } catch (error) {}
+                } catch (error) {
+                  t.log(error)
+                }
                 c.end()
                 t.log('Server run #3 close')
                 spoof.close()

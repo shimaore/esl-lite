@@ -50,7 +50,7 @@ const commonOptions = [
 ]
 
 export const simpleStartClient = async (
-  log: (...values: any[]) => void,
+  log: (...values: unknown[]) => void,
   stdio: 'ignore' | 'inherit'
 ): Promise<void> => {
   const dir = `/tmp/client-${ulid()}`
@@ -75,7 +75,9 @@ export const simpleStartClient = async (
             recursive: true,
             force: true,
           })
-        } catch (error1) {}
+        } catch (error1) {
+          true
+        }
         if (code !== 0) {
           process.exit(1)
         }
@@ -89,7 +91,7 @@ export const simpleStartClient = async (
 }
 
 export const simpleStartServer = async (
-  log: (...values: any[]) => void,
+  log: (...values: unknown[]) => void,
   stdio: 'ignore' | 'inherit'
 ): Promise<void> => {
   const dir = `/tmp/server-${ulid()}`
@@ -113,7 +115,9 @@ export const simpleStartServer = async (
           recursive: true,
           force: true,
         })
-      } catch (error1) {}
+      } catch (error1) {
+        true
+      }
       if (code !== 0) {
         process.exit(1)
       }
@@ -126,7 +130,7 @@ export const simpleStartServer = async (
 }
 
 export const simpleStop = async (
-  log: (...values: any[]) => void
+  log: (...values: unknown[]) => void
 ): Promise<void> => {
   await sleep(2 * second)
   log('Stopping FS')

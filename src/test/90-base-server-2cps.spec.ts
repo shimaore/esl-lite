@@ -47,7 +47,10 @@ const server2 = {
 }
 
 // We implement a small LCR database using PouchDB.
-const ev = new FreeSwitchEventEmitter()
+const ev = new FreeSwitchEventEmitter<
+  'server7022',
+  { server7022: () => void }
+>()
 
 test.before(async function (t) {
   const db = new Map<string, { _id: string; comment: string; target: string }>()
@@ -98,8 +101,7 @@ test.before(async function (t) {
       const rows = ids.map((k) => db.get(k))
       // The first successful route is selected.
       const doc = (function () {
-        const results: Array<{ _id: string; comment: string; target: string }> =
-          []
+        const results: { _id: string; comment: string; target: string }[] = []
         const len = rows.length
         for (let j = 0; j < len; j++) {
           const row = rows[j]
@@ -137,7 +139,7 @@ test.before(async function (t) {
         t.log('Received server7022: calling exit')
         await call.exit()
         t.log('Received server7022: sending event')
-        ev.emit('server7022')
+        ev.emit('server7022', undefined)
         break
       case 'server7004': {
         server1.stats.received++

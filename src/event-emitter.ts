@@ -2,10 +2,9 @@
 // but using Map, Set, adding `once` and an async version.
 // `typed-emitter` no longer works properly.
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export class FreeSwitchEventEmitter<
   E extends string,
-  T extends Record<E, (...args: any[]) => void>,
+  T extends Record<E, (arg: never) => void>,
 > {
   private __on: { [eventName in keyof T]?: Set<T[eventName]> }
   private __once: { [eventName in keyof T]?: Set<T[eventName]> }
@@ -15,16 +14,16 @@ export class FreeSwitchEventEmitter<
     this.__once = {}
   }
 
-  emit<K extends keyof T>(event: K, ...args: Parameters<T[K]>): boolean {
+  emit<K extends keyof T>(event: K, arg: Parameters<T[K]>[0]): boolean {
     const _on = this.__on[event]
     const _once = this.__once[event]
     this.__once[event] = undefined
     const count: number = (_on?.size ?? 0) + (_once?.size ?? 0)
     _on?.forEach((h) => {
-      h(...args)
+      h(arg)
     })
     _once?.forEach((h) => {
-      h(...args)
+      h(arg)
     })
     return count > 0
   }
@@ -74,3 +73,12 @@ export const once = async <
   emitter: FreeSwitchEventEmitter<E, T>,
   event: K
 ): Promise<Parameters<T[K]>> => await emitter.__onceAsync(event)
+
+interface AbortSignalEvents {
+  abort: (a: undefined) => void
+}
+
+export type AbortSignalEventEmitter = FreeSwitchEventEmitter<
+  keyof AbortSignalEvents,
+  AbortSignalEvents
+>

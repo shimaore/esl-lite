@@ -15,9 +15,9 @@ export const FreeSwitchParser = async (
   socket: Socket,
   processMessage: Processor
 ): Promise<undefined | FreeSwitchParserNonEmptyBufferAtEndError> => {
-  let bodyLength: number = 0
+  let bodyLength = 0
   let buffers: Buffer[] = []
-  let buffersLength: number = 0
+  let buffersLength = 0
   let headers: Headers = new Headers()
 
   // ### Capture body
