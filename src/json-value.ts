@@ -1,3 +1,6 @@
+/**
+ * Type declaration for a JSON value.
+ */
 export type JSONValue =
   | string
   | number

@@ -21,14 +21,29 @@ import { Body } from './body.js'
 // @ts-expect-error @types/node does not know that JSON.parse accepts Buffer.
 const jsonParseBuffer = (b: Buffer): JSONValue => JSON.parse(b) as JSONValue
 
-type ResponseLogger = (
+/**
+ * Type for a logger for the `FreeSwitchResponse` class
+ *
+ * This is a specialized logger type.
+ */
+export type ResponseLogger = (
   msg: string,
   data: { ref: string; [key: string]: unknown }
 ) => void
 
+/**
+ * An object containing JSON values
+ */
 export type JSONMap = Record<string, JSONValue>
+
+/**
+ * An object containing simple JSON values
+ */
 export type ValueMap = Record<string, string | number | boolean | undefined>
 
+/**
+ * Parse a non-JSON event body received from FreeSwitch
+ */
 export const parseBody = function (bodyBuffer: Buffer): Body {
   const bodyLines = bodyBuffer.toString('utf8').split('\n')
   const body = new Body({})
@@ -41,18 +56,27 @@ export const parseBody = function (bodyBuffer: Buffer): Body {
   return body
 }
 
+/**
+ * Specialized loggers for FreeSwitchResponse
+ */
 export interface FreeSwitchResponseLogger {
   debug: ResponseLogger
   info: ResponseLogger
   error: ResponseLogger
 }
 
+/**
+ * Error: un-supported Content-Type in event
+ */
 export class FreeSwitchUnhandledContentTypeError extends Error {
   constructor(public readonly contentType: string) {
     super(`FreeSwitchUnhandledContentTypeError: ${contentType}`)
   }
 }
 
+/**
+ * Error: missing Content-Type header in event
+ */
 export class FreeSwitchMissingContentTypeError extends Error {
   constructor(
     public readonly headers: Headers,
@@ -62,12 +86,18 @@ export class FreeSwitchMissingContentTypeError extends Error {
   }
 }
 
+/**
+ * Error: event body is invalid
+ */
 export class FreeSwitchInvalidBodyError extends Error {
   constructor(public readonly body: string) {
     super('FreeSwitchInvalidBodyError')
   }
 }
 
+/**
+ * Error: event name is missing in event headers
+ */
 export class FreeSwitchMissingEventNameError extends Error {
   constructor(
     public readonly headers: Headers,
@@ -77,6 +107,9 @@ export class FreeSwitchMissingEventNameError extends Error {
   }
 }
 
+/**
+ * Error: timeout occurred
+ */
 export class FreeSwitchTimeoutError extends Error {
   constructor(
     public readonly timeout: number,
@@ -86,18 +119,27 @@ export class FreeSwitchTimeoutError extends Error {
   }
 }
 
+/**
+ * Error: connection with FreeSwitch was closed
+ */
 export class FreeSwitchClosedError extends Error {
   constructor(public readonly when: string) {
     super(`FreeSwitchClosedError: socket closed ${when}`)
   }
 }
 
+/**
+ * Error: response from FreeSwitch does not contain a proper reply
+ */
 export class FreeSwitchNoReplyError extends Error {
   constructor(public readonly command: string) {
     super('FreeSwitchNoReplyError: no reply')
   }
 }
 
+/**
+ * Error: command failed
+ */
 export class FreeSwitchFailedCommandError extends Error {
   constructor(
     public readonly command: string,
@@ -107,18 +149,27 @@ export class FreeSwitchFailedCommandError extends Error {
   }
 }
 
+/**
+ * Error: operation was canceled
+ */
 export class FreeSwitchAbortError extends Error {
   constructor() {
     super('FreeSwitchAbortError: operation was canceled')
   }
 }
 
+/**
+ * Error: socket was ended
+ */
 export class FreeSwitchEndReason extends Error {
   constructor(reason: string) {
     super(`FreeSwitchEndReason: ${reason}`)
   }
 }
 
+/**
+ * Response received from FreeSwitch, including headers and body
+ */
 export interface FreeSwitchEventData {
   /** Headers */
   headers: Headers
@@ -126,12 +177,18 @@ export interface FreeSwitchEventData {
   body: Body
 }
 
+/**
+ * Response received from FreeSwitch, with only the headers parsed
+ */
 export interface FreeSwitchParserData {
   headers: Headers
   body: Buffer
 }
 
-type SendResult = Promise<
+/**
+ * Type returned by most APIs in FreeSwitchResponse
+ */
+export type SendResult = Promise<
   | FreeSwitchEventData
   | FreeSwitchClosedError
   | FreeSwitchNoReplyError
@@ -139,12 +196,19 @@ type SendResult = Promise<
   | FreeSwitchTimeoutError
   | FreeSwitchAbortError
 >
+
+/**
+ * Parser events
+ */
 export interface FreeSwitchParserEvents {
   // Not listing internally-processed events.
   // May also receive `freeswitch_<contentType>` — these are errors, though,
   // we should support all content-types reported by mod_event_socket at this
   // time.
 
+  /**
+   * Emitted when the parser encountered an error
+   */
   error: (
     err:
       | FreeSwitchMissingContentTypeError
@@ -154,9 +218,16 @@ export interface FreeSwitchParserEvents {
       | FreeSwitchMissingEventNameError
       | FreeSwitchParserNonEmptyBufferAtEndError
   ) => void
+
+  /**
+   * Emitted when Event Socket emitted log data
+   */
   freeswitch_log_data: (data: FreeSwitchParserData) => void
 }
 
+/**
+ * Socket events
+ */
 export interface FreeSwitchSocketEvents {
   close: (err: FreeSwitchClosedError) => void
   error: (err: Error) => void
@@ -164,6 +235,9 @@ export interface FreeSwitchSocketEvents {
   end: (err: FreeSwitchEndReason) => void
 }
 
+/**
+ * Events private to the FreeSwitchResponse class
+ */
 export interface FreeSwitchPrivateEvents {
   freeswitch_auth_request: (data: FreeSwitchParserData) => void
   freeswitch_command_reply: (data: FreeSwitchParserData) => void
@@ -171,6 +245,9 @@ export interface FreeSwitchPrivateEvents {
   freeswitch_disconnect_notice: (data: FreeSwitchParserData) => void
 }
 
+/**
+ * Type definitions for all FreeSwitch events
+ */
 export interface FreeSwitchPublicResponseEvents {
   CUSTOM: (data: FreeSwitchEventData) => void
   CLONE: (data: FreeSwitchEventData) => void
@@ -267,13 +344,28 @@ export interface FreeSwitchPublicResponseEvents {
   ALL: (data: FreeSwitchEventData) => void
 }
 
+/**
+ * The client will provide these when it connects
+ *
+ * ```ts
+ * const client = new FreeSwitchClient()
+ *
+ * client.on('connect', (service:FreeSwitchResponse) : void => {
+ *   …
+ * }
+ * ```
+ *
+ * This class implements low-level APIs for FreeSwich, plus a couple
+ * higher-level ones (`bgapi`, `command_uuid`) suitable for use in
+ * application code.
+ */
 export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   keyof FreeSwitchPublicResponseEvents,
   FreeSwitchPublicResponseEvents
 > {
   public closed = true
 
-  // Uniquely identify each instance, for tracing purposes.
+  /** Uniquely identify each instance, for tracing purposes. */
   private readonly __ref: string = ulid()
   private readonly __socket: Socket
   private readonly logger: FreeSwitchResponseLogger
@@ -295,19 +387,55 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
     FreeSwitchParserEvents
   >
 
-  // The module provides statistics in the `stats` object if it is initialized. You may use it  to collect your own call-related statistics.
+  /** Statistics about this connection */
   public stats: {
+    /**
+     * Number of missing Content-Type headers
+     */
     missing_contentType: bigint
+    /**
+     * Number of missing Event-Name headers
+     */
     missing_event_name: bigint
+    /**
+     * Number of authentication requests
+     */
     auth_request: bigint
+    /**
+     * Number of command replies
+     */
     command_reply: bigint
+    /**
+     * Number of FreeSwitch events received
+     */
     events: bigint
+    /**
+     * Number of JSON parse errors (in body)
+     */
     json_parse_errors: bigint
+    /**
+     * Number of log data events received
+     */
     log_data: bigint
+    /**
+     * Number of disconnect event received
+     */
     disconnect: bigint
+    /**
+     * Number of api responses
+     */
     api_responses: bigint
+    /**
+     * Number of rude rejections (generally due to ACL access to the Event Socket)
+     */
     rude_rejections: bigint
+    /**
+     * Number of unhandled events
+     */
     unhandled: bigint
+    /**
+     * Number of unflushed writes, indicating the network or FreeSwitch are not keeping up with our traffic
+     */
     unflushedWrites: bigint
   } = {
     missing_contentType: 0n,
@@ -324,7 +452,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
     unflushedWrites: 0n,
   }
 
-  // The `FreeSwitchResponse` is bound to a single socket (dual-stream).
+  /** The `FreeSwitchResponse` is bound to a single socket (dual-stream). */
   constructor(socket: Socket, logger: FreeSwitchResponseLogger) {
     super()
     socket.setKeepAlive(true)
@@ -438,10 +566,16 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
     this.__socket.on('error', socketOnError)
   }
 
+  /**
+   * Unique identifier for this FreeSwitchResponse, used e.g. in the logger
+   */
   ref(): string {
     return this.__ref
   }
 
+  /**
+   * End this FreeSwichResponse, closing the underlying socket
+   */
   end(reason: string): void {
     this.socketEventEmitter.emit('end', new FreeSwitchEndReason(reason))
   }
@@ -554,6 +688,9 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
     return await p
   }
 
+  /**
+   * (internal) Promise for private event
+   */
   async oncePrivateAsync(
     event: keyof FreeSwitchPrivateEvents,
     timeout: number,
@@ -580,9 +717,12 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   // Queueing
   // ========
 
-  // Enqueue a function that returns a Promise.
-  // The function is only called when all previously enqueued functions-that-return-Promises are completed and their respective Promises fulfilled or rejected.
-  async enqueue<T>(f: () => Promise<T>): Promise<T | FreeSwitchClosedError> {
+  /** Enqueue a function that returns a Promise.
+   * The function is only called when all previously enqueued functions-that-return-Promises are completed and their respective Promises fulfilled or rejected.
+   */
+  private async enqueue<T>(
+    f: () => Promise<T>
+  ): Promise<T | FreeSwitchClosedError> {
     if (this.closed) {
       return new FreeSwitchClosedError('enqueuing')
     }
@@ -610,7 +750,11 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   // -----
   //
 
-  // Send a single command to FreeSwitch; `args` is a hash of headers sent with the command.
+  /**
+   * Send a single command to FreeSwitch; `args` is a hash of headers sent with the command.
+   *
+   * This method is not expected to throw / return a rejected Promise.
+   */
   async write(
     command: string,
     headers: ValueMap
@@ -659,7 +803,6 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
           headers,
           error,
         })
-        // Cancel any pending Promise started with `@onceAsync`, and close the connection.
         if (error instanceof Error) {
           this.socketEventEmitter.emit('write', error)
         } else {
@@ -675,7 +818,11 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   // send
   // ----
 
-  // A generic way of sending commands to FreeSwitch, wrapping `write` into a Promise that waits for FreeSwitch's notification that the command completed.
+  /**
+   * A generic way of sending commands to FreeSwitch, wrapping `write` into a Promise that waits for FreeSwitch's notification that the command completed.
+   *
+   * This method is not expected to throw / return a rejected Promise.
+   */
   async send(command: string, args: ValueMap, timeout: number): SendResult {
     if (this.closed) {
       return new FreeSwitchClosedError('before sending')
@@ -756,8 +903,8 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   // Process data from the parser
   // ============================
 
-  // Rewrite headers as needed to work around some weirdnesses in the protocol; and assign unified event IDs to the Event Socket's Content-Types.
-  process(headers: Headers, body: Buffer): void {
+  /**  Rewrite headers as needed to work around some weirdnesses in the protocol; and assign unified event IDs to the Event Socket's Content-Types. */
+  private process(headers: Headers, body: Buffer): void {
     const contentType = headers.contentType
     if (contentType == null) {
       this.stats.missing_contentType++
@@ -935,9 +1082,13 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   // -----
 
   /** Send an API command in the background. Wraps it inside a Promise.
-   *  `bgapi` will throw if the job submission fails.
-   *  However it will not throw if the background job failed. You can check the response
-   *  from the background job in the `response` field of the return value.
+   *
+   *  `bgapi` will return an error if the job submission fails.
+   *
+   * It will not return an error if the job itself failed.
+   *  You can check the response from the background job in the `response` field of the return value.
+   *
+   * This method is not expected to throw / return a rejected Promise.
    */
   async bgapi(
     command: string,
@@ -970,8 +1121,17 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   // event_json
   // ----------
 
-  // Request that the server send us events in JSON format.
-  // For example: `res.event_json 'HEARTBEAT'`
+  /**
+   * Request that the server adds the events to its filter, and provide them in JSON format.
+   * ```ts
+   * await service.event_json(['HEARTBEAT'])
+   * ```
+   * You must call this method in order for events to start, in other words calling
+   * `service.on(event,…)`, `service.once(event,…)` etc will not work unless you
+   * request reception of the `event` using this `event_json`.
+   *
+   * This method is not expected to throw / return a rejected Promise.
+   */
   async event_json(events: EventName[]): SendResult {
     return await this.send(
       `event json ${events.join(' ')}`,
@@ -983,7 +1143,11 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   // nixevents
   // ---------
 
-  // Remove the given event types from the events ACL.
+  /**
+   * Remove the given event types from the events ACL.
+   *
+   * This method is not expected to throw / return a rejected Promise.
+   */
   async nixevent(events: EventName[]): SendResult {
     return await this.send(
       `nixevent ${events.join(' ')}`,
@@ -995,7 +1159,11 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   // noevents
   // --------
 
-  // Remove all events types.
+  /**
+   * Remove all events types from the filters.
+   *
+   * This method is not expected to throw / return a rejected Promise.
+   */
   async noevents(): SendResult {
     return await this.send('noevents', {}, this.localTimeout)
   }
@@ -1003,7 +1171,16 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   // filter
   // ------
 
-  // Generic event filtering
+  /**
+   * Generic event filtering using header and value matching.
+   *
+   * This will only forward events for which the header has this value.
+   *
+   * This will most probably break this module's handling of background jobs etc.
+   * so this is most probably _not_ what one wants in most cases.
+   *
+   * This method is not expected to throw / return a rejected Promise.
+   */
   async filter(header: string, value: string): SendResult {
     return await this.send(`filter ${header} ${value}`, {}, this.localTimeout)
   }
@@ -1011,7 +1188,11 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   // filter_delete
   // -------------
 
-  // Remove a filter.
+  /**
+   * Remove a generic header-and-value filter.
+   *
+   * This method is not expected to throw / return a rejected Promise.
+   */
   async filter_delete(header: string, value: string): SendResult {
     if (value != null) {
       return await this.send(
@@ -1027,7 +1208,11 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   // sendevent
   // ---------
 
-  // Send an event into the FreeSwitch event queue.
+  /**
+   * Send an event into the FreeSwitch event queue.
+   *
+   * This method is not expected to throw / return a rejected Promise.
+   */
   async sendevent(eventName: EventName, args: ValueMap): SendResult {
     return await this.send(`sendevent ${eventName}`, args, this.localTimeout)
   }
@@ -1040,7 +1225,12 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
 
   // Authenticate with FreeSwitch.
 
-  // This normally not needed since in outbound (server) mode authentication is not required, and for inbound (client) mode the module authenticates automatically when requested.
+  /**
+   * Used internally.
+   * Calling this method is normally not needed since the module authenticates automatically when requested.
+   *
+   * This method is not expected to throw / return a rejected Promise.
+   */
   async auth(password: string): SendResult {
     return await this.send(`auth ${password}`, {}, this.localTimeout)
   }
@@ -1051,7 +1241,16 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   // log
   // ---
 
-  // Enable logging on the socket, optionally setting the log level.
+  /**
+   * Enable logging on the socket, optionally setting the log level.
+   *
+   * The logs will be published using the `freeswitch_log_data` event name:
+   * ```
+   * service.on('freeswitch_log_data', (data) => { … })
+   * ```
+   *
+   * This method is not expected to throw / return a rejected Promise.
+   */
   async log(level: number): SendResult {
     if (level != null) {
       return await this.send(`log ${level}`, {}, this.localTimeout)
@@ -1063,7 +1262,11 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   // nolog
   // -----
 
-  // Disable logging on the socket.
+  /**
+   * Disable logging on the socket.
+   *
+   * This method is not expected to throw / return a rejected Promise.
+   */
   async nolog(): SendResult {
     return await this.send('nolog', {}, this.localTimeout)
   }
@@ -1074,7 +1277,14 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   // sendmsg_uuid
   // ------------
 
-  // Send a command to a given UUID.
+  /**
+   * Send a message to a given UUID (channel).
+   *
+   * This is a low-level operation; in most cases `execute_uuid`, `command_uuid` etc
+   * will provide a better API.
+   *
+   * This method is not expected to throw / return a rejected Promise.
+   */
   async sendmsg_uuid(
     uuid: string,
     command: string,
@@ -1094,8 +1304,11 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   // execute_uuid
   // ------------
 
-  /** Execute an application for the given UUID (in client mode). Does not await the result.
-   * event-uuid and event-uuid-name are set as `app_uuid` and `app_uuid_name` in the channel, respectively.
+  /**
+   * Execute an application for the given UUID (channel). Does not await the result.
+   * `event-uuid` and `event-uuid-name` are set as `app_uuid` and `app_uuid_name` in the channel, respectively.
+   *
+   * This method is not expected to throw / return a rejected Promise.
    */
   async execute_uuid(
     uuid: string,
@@ -1119,7 +1332,13 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
 
   // TODO: Support the alternate format (with no `execute-app-arg` header but instead a `text/plain` body containing the argument).
 
-  /** Execute an application synchronously. Return a Promise.
+  /**
+   * Execute an application synchronously.
+   *
+   * Check the result's `response` field to know the outcome of a command.
+   * The first character indicates success (`+`) or failure (`-`).
+   *
+   * This method is not expected to throw / return a rejected Promise.
    */
   async command_uuid(
     uuid: string,
@@ -1149,7 +1368,10 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   // hangup_uuid
   // -----------
 
-  /** Hangup the call referenced by the given UUID with an optional (FreeSwitch) cause code.
+  /**
+   * Hangup the call referenced by the given UUID with an optional (FreeSwitch) cause code.
+   *
+   * This method is not expected to throw / return a rejected Promise.
    */
   async hangup_uuid(uuid: string, hangupCause?: string): SendResult {
     if (hangupCause == null) {
@@ -1164,7 +1386,12 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   // unicast_uuid
   // ------------
 
-  // Forwards the media to and from a given socket.
+  /**
+   * Forwards the media to and from a given socket.
+   *
+   *
+   * This method is not expected to throw / return a rejected Promise.
+   */
 
   // Arguments:
   // - `local-ip`
@@ -1181,6 +1408,12 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
       'remote-ip': string
       'remote-port': number
       transport: 'tcp' | 'udp'
+      /**
+       * native means do not transcode to/from L16 audio
+       *
+       * In other words, if the flags is present, audio will be in the native codec.
+       * If the flag is absent, audio will be in L16 format.
+       */
       flags?: 'native'
     }
   ): SendResult {

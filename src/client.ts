@@ -1,8 +1,8 @@
-// Client
-// ======
-
-// Client mode is used to place new calls or take over existing calls.
-// Contrarily to the server which will handle multiple socket connections over its lifetime, a client only handles one socket, so only one `FreeSwitchResponse` object is needed as well.
+/**
+ * The main Client class
+ *
+ * Event Socket client mode can be used to place new calls or take over existing calls.
+ */
 
 import { Socket } from 'node:net'
 
@@ -16,22 +16,87 @@ import { FreeSwitchParserNonEmptyBufferAtEndError } from './parser.js'
 
 const defaultPassword = 'ClueCon'
 
-type Logger = (msg: string, data?: unknown) => void
+/**
+ * An individual logger
+ *
+ * Each logging function must accept a message and optional data.
+ */
+export type Logger = (msg: string, data?: unknown) => void
 
+/**
+ * `esl-lite` is agnostic as to which logger you use.
+ *
+ * Each logging function must accept a message and optional data.
+ *
+ * To disable logging for a level, use an empty function:
+ * ```ts
+ * const logger = {
+ *   debug: () => {}
+ *   info: (msg,data) => logger.info(data,msg)
+ *   error: (msg,data) => logger.error(data,msg)
+ * }
+ * const client = new FreeSwitchClient({ logger })
+ * ```
+ */
 export interface FreeSwitchClientLogger {
   debug: Logger
   info: Logger
   error: Logger
 }
 
-interface FreeSwitchClientEvents {
+/**
+ * Events for the FreeSwitchClient class.
+ */
+export interface FreeSwitchClientEvents {
+  /**
+   * `connect` is emitted when the client connects or reconnects to the Event Socket
+   */
   connect: (call: FreeSwitchResponse) => void
+  /**
+   * `error` is emitted when the underlying socker is in error, or when an
+   * error occurs at connection time.
+   *
+   * This is informative only: those errors are corrected automatically.
+   */
   error: (error: unknown) => void
+  /**
+   * `warning` is emitted when some error occurs in the parser
+   *
+   * This is informative only: those errors are corrected automatically.
+   */
   warning: (data: FreeSwitchParserNonEmptyBufferAtEndError) => void
+  /**
+   * `reconnecting` is emitted when the client was disconnected and will attempt a reconnection
+   */
   reconnecting: (retry_timeout: number) => void
+  /**
+   * `end` is emitted when the `end()` method is called
+   */
   end: () => void
 }
 
+/**
+ * FreeSwitchClient is the function you use to create a new client.
+ * It will automatically reconnect.
+ *
+ * ```ts
+ * const client = new FreeSwitchClient()
+ * client.on('connect', (service) => {
+ *   // ^^ the connect callback is not async
+ *
+ *   (async function() {
+ *
+ *     const res = await service.bgapi('sofia status', 1000)
+ *     console.log('sofia status is', res)
+ *
+ *    })().catch( console.error )
+ *
+ * })
+ *
+ * client.connect()
+ * ```
+ * `service` is a [`FreeSwichResponse`](../classes/response.FreeSwitchResponse) object
+ */
 export class FreeSwitchClient extends FreeSwitchEventEmitter<
   keyof FreeSwitchClientEvents,
   FreeSwitchClientEvents
@@ -56,7 +121,7 @@ export class FreeSwitchClient extends FreeSwitchEventEmitter<
    */
   constructor(options?: {
     host?: string
-    port: number
+    port?: number
     password?: string
     logger?: FreeSwitchClientLogger
   }) {
@@ -73,6 +138,9 @@ export class FreeSwitchClient extends FreeSwitchEventEmitter<
     )
   }
 
+  /**
+   * Start connecting to FreeSwitch, reconnect if needed
+   */
   connect(): void {
     if (!this.running) {
       this.logger.debug('FreeSwitchClient::connect: not running, aborting', {
@@ -181,6 +249,9 @@ export class FreeSwitchClient extends FreeSwitchEventEmitter<
     }
   }
 
+  /**
+   * Close the current connection to FreeSwitch and stop attempting to reconnect
+   */
   end(): void {
     this.logger.debug('FreeSwitchClient::end: end requested by application.', {
       attempt: this.attempt,

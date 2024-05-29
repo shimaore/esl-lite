@@ -1,7 +1,8 @@
-// Inspired by https://danilafe.com/blog/typescript_typesafe_events/
-// but using Map, Set, adding `once` and an async version.
-// `typed-emitter` no longer works properly.
-
+/**
+ * Inspired by https://danilafe.com/blog/typescript_typesafe_events/
+ * but using Map, Set, adding `once` and an async version.
+ * `typed-emitter` no longer works properly.
+ */
 export class FreeSwitchEventEmitter<
   E extends string,
   T extends Record<E, (arg: never) => void>,
@@ -9,11 +10,20 @@ export class FreeSwitchEventEmitter<
   private __on: { [eventName in keyof T]?: Set<T[eventName]> }
   private __once: { [eventName in keyof T]?: Set<T[eventName]> }
 
+  /**
+   * Constructs a new event emitter.
+   * ```ts
+   * const ev = new FreeSwitchEventEmitter<'ping',{ ping: () => console.log('ping\) }>()
+   * ```
+   */
   constructor() {
     this.__on = {}
     this.__once = {}
   }
 
+  /**
+   * Send out an event: all registered callbacks are notified.
+   */
   emit<K extends keyof T>(event: K, arg: Parameters<T[K]>[0]): boolean {
     const _on = this.__on[event]
     const _once = this.__once[event]
@@ -28,6 +38,10 @@ export class FreeSwitchEventEmitter<
     return count > 0
   }
 
+  /**
+   * Register a new callback for the named event.
+   * The callback is called every time the event is emitted.
+   */
   on<K extends keyof T>(event: K, handler: T[K]): this {
     if (this.__on[event] == null) {
       this.__on[event] = new Set()
@@ -36,6 +50,10 @@ export class FreeSwitchEventEmitter<
     return this
   }
 
+  /**
+   * Register a new callback for the named event.
+   * The callback is only called the first time the event is emitted.
+   */
   once<K extends keyof T>(event: K, handler: T[K]): this {
     if (this.__once[event] == null) {
       this.__once[event] = new Set()
@@ -44,7 +62,10 @@ export class FreeSwitchEventEmitter<
     return this
   }
 
-  async __onceAsync<K extends keyof T>(event: K): Promise<Parameters<T[K]>> {
+  /**
+   * Returns a Promise that is resolved the next time the named event is emitted.
+   */
+  async onceAsync<K extends keyof T>(event: K): Promise<Parameters<T[K]>> {
     // FIXME `as T[K]` might not be needed but I do not know how to address the problem it works around.
     const resolver = (resolve: (_: Parameters<T[K]>) => void): T[K] =>
       ((...args: Parameters<T[K]>): void => {
@@ -53,17 +74,26 @@ export class FreeSwitchEventEmitter<
     return await new Promise((resolve) => this.once(event, resolver(resolve)))
   }
 
+  /**
+   * Unregister the callback from the named event.
+   */
   removeListener<K extends keyof T>(event: K, handler: T[K]): void {
     this.__on[event]?.delete(handler)
     this.__once[event]?.delete(handler)
   }
 
+  /**
+   * Unregisters all callbacks from the named event.
+   */
   removeAllListeners(): void {
     this.__on = {}
     this.__once = {}
   }
 }
 
+/**
+ * Returns a Promise that is resolved the next time the named event is emitted on the emitter.
+ */
 export const once = async <
   E extends string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -72,12 +102,18 @@ export const once = async <
 >(
   emitter: FreeSwitchEventEmitter<E, T>,
   event: K
-): Promise<Parameters<T[K]>> => await emitter.__onceAsync(event)
+): Promise<Parameters<T[K]>> => await emitter.onceAsync(event)
 
-interface AbortSignalEvents {
+/**
+ * Type for event handlers for AbortSignalEventEmitter
+ */
+export interface AbortSignalEvents {
   abort: (a: undefined) => void
 }
 
+/**
+ * An event-emitter whose only event is named `abort`.
+ */
 export type AbortSignalEventEmitter = FreeSwitchEventEmitter<
   keyof AbortSignalEvents,
   AbortSignalEvents

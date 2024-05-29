@@ -1,4 +1,7 @@
-// List from https://github.com/signalwire/freeswitch/blob/master/src/switch_event.c#L137
+/*
+ * Type defining all event names used by FreeSwitch
+ * Reference: https://github.com/signalwire/freeswitch/blob/master/src/switch_event.c#L137
+ */
 export type EventName =
   | 'CUSTOM'
   | 'CLONE'
@@ -94,6 +97,10 @@ export type EventName =
   | 'SHUTDOWN_REQUESTED'
   | 'ALL'
 
+/**
+ * Set of all event names used by FreeSwitch
+ * Reference: https://github.com/signalwire/freeswitch/blob/master/src/switch_event.c#L137
+ */
 export const EventNames = new Set<EventName>([
   'CUSTOM',
   'CLONE',

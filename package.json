@@ -41,6 +41,7 @@
     "eslint": "9.3.0",
     "nyc": "15.1.0",
     "prettier": "3.2.5",
+    "typedoc": "0.25.13",
     "typescript": "5.4.5",
     "typescript-eslint": "7.10.0",
     "uuid": "9.0.1"
@@ -48,7 +49,7 @@
   "scripts": {
     "build": "node build.mjs",
     "prepublishOnly": "yarn install && yarn build && yarn syntax",
-    "lint": "yarn syntax && eslint --fix src/**/*.ts && prettier -w .",
+    "lint": "yarn syntax && eslint --fix src/**/*.ts && prettier -w . && typedoc 'src/*.ts'",
     "test": "yarn prepublishOnly && nyc ava -c 1 --fail-fast",
     "test:optimize": "node --trace-deopt build/trace/benchmark.js | grep bailout",
     "syntax": "tsc",

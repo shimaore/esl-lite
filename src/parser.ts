@@ -3,14 +3,27 @@
 import { type Socket } from 'node:net'
 import { Headers } from './headers.js'
 
+/**
+ * Error indicates that the buffer was not empty when the connection was closed.
+ *
+ * This is harmless.
+ */
 export class FreeSwitchParserNonEmptyBufferAtEndError extends Error {
   constructor(public readonly buffer: Buffer) {
     super(JSON.stringify({ buffer }))
   }
 }
 
-type Processor = (headers: Headers, body: Buffer) => void
+/**
+ * Type for a parser callback
+ */
+export type Processor = (headers: Headers, body: Buffer) => void
 
+/**
+ * Low-level event socket parser
+ *
+ * Parses headers and collects (but does not parse) an event's body.
+ */
 export const FreeSwitchParser = async (
   socket: Socket,
   processMessage: Processor
@@ -99,8 +112,13 @@ export const FreeSwitchParser = async (
 // Headers parser
 // ==============
 
-// Event Socket framing contains headers and a body.
-// The header must be decoded first to learn the presence and length of the body.
+/**
+ * Parses headers
+ *
+ * Event Socket framing contains headers and a body.
+ *
+ * The header must be decoded first to learn the presence and length of the body.
+ */
 export const parseHeaders = function (headerBuffer: Buffer): Headers {
   const headerLine = headerBuffer.toString('utf8').split('\n')
   const headers = new Headers()

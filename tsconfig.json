@@ -26,6 +26,7 @@
     "types",
     "esl-lite.mjs",
     "esl-lite.cjs",
-    "yarn*"
+    "yarn*",
+    "docs"
   ]
 }

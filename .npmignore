@@ -14,3 +14,5 @@ test-ts/
 .yarnrc.yml
 build.mjs
 build/
+docs/
+typedoc.json
