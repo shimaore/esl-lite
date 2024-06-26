@@ -1,7 +1,7 @@
 /**
  * Storage for an event's headers.
  *
- * Some specialized headersare automatically captured.
+ * Some specialized headers are automatically captured.
  */
 export class Headers {
   /**
@@ -25,7 +25,7 @@ export class Headers {
    */
   public socketMode: string | undefined
   /**
-   * `Control header
+   * `Control` header
    */
   public control: string | undefined
 
