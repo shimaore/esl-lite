@@ -49,7 +49,7 @@
   "scripts": {
     "build": "node build.mjs",
     "prepublishOnly": "yarn install && yarn build && yarn syntax",
-    "lint": "yarn syntax && eslint --fix src/**/*.ts && prettier -w . && typedoc 'src/*.ts'",
+    "lint": "yarn prepublishOnly && eslint --fix src/**/*.ts && prettier -w . && typedoc 'src/*.ts'",
     "test": "yarn prepublishOnly && nyc ava -c 1 --fail-fast",
     "test:optimize": "node --trace-deopt build/trace/benchmark.js | grep bailout",
     "syntax": "tsc",

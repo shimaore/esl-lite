@@ -4,9 +4,9 @@
 
 Like `esl`, it is used in production worldwide.
 
-## Which package should you use?
+## Which package should I use?
 
-Use `esl` if you need server mode, in other words if you are testing FreeSwitch and need an easy-to-use API for per-call processing.
+Use `esl` if server mode is required.
 
 Use `esl-lite` otherwise. Event Socket server-mode does not scale well.
 
@@ -29,6 +29,8 @@ const client = new FreeSwitchClient()
 
 // FreeSwitchClient will reconnect when needed
 client.on('connect', function (service): void {
+  // `service` is a FreeSwitchResponse object
+
   // Listen for FreeSwitch events
   service.event_json(['CHANNEL_CREATE'])
 
@@ -41,20 +43,26 @@ client.on('connect', function (service): void {
     if (uuid) {
       // Send command to a specific channel!
       service.command_uuid(uuid, 'answer', '', 4000)
-      // ^^ Notice this returns a Promise and you should `await` or `catch` it
+      // ^^ Notice this returns a Promise and the code should `await` or `catch` it
     }
   })
 
   // Send generic commands
   service.bgapi('originate sofia/profile/sip:destination@host &park')
-  // ^^ Notice this returns a Promise and you should `await` or `catch` it
+  // ^^ Notice this returns a Promise and the code should `await` or `catch` it
 })
 
 client.connect()
 ```
 
-See [FreeSwitchClient](./docs/classes/client.FreeSwitchClient.html) and [FreeSwitchResponse](./docs/classes/response.FreeSwitchResponse.html) for the main classes.
+## Documentation
+
+See [FreeSwitchClient](https://shimaore.github.io/esl-lite/classes/client.FreeSwitchClient.html)
+and [FreeSwitchResponse](https://shimaore.github.io/esl-lite/classes/response.FreeSwitchResponse.html)
+for the main classes.
 
 ## Source
 
-Source: https://g.rie.re/shimaore/esl-lite
+The primary repository is https://g.rie.re/shimaore/esl-lite
+
+Also available on [Github](https://github.com/shimaore/esl-lite) and [Gitlab](https://gitlab.com/shimaore/esl-lite).
