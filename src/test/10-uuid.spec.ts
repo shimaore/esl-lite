@@ -1,4 +1,4 @@
-import test from 'ava'
+import test from 'node:test'
 
 import * as legacyESL from 'esl'
 
@@ -14,8 +14,8 @@ import { FreeSwitchClient, type FreeSwitchResponse } from '../esl-lite.js'
 
 // Using UUID (in client mode)
 // ---------------------------
-test.before(startServer)
-test.after.always(stop)
+test.before(() => startServer(), { timeout: 12*second })
+test.after(stop)
 
 const serverPort = 8022
 

@@ -1,15 +1,15 @@
-import test from 'ava'
+import test from 'node:test'
 
 import { clientLogger, onceConnected, startServer, stop } from './utils.js'
 import { FreeSwitchClient } from '../esl-lite.js'
+import { second } from './tools.js'
 
 const serverPort = 8022
 
 test.before(async (t) => {
   await startServer(t)
-  t.pass()
-})
-test.after.always(stop)
+}, { timeout: 12*second })
+test.after(stop, { timeout: 12*second })
 
 test('10-server-image: should be reachable', async function (t) {
   const client = new FreeSwitchClient({

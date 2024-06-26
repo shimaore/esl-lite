@@ -11,7 +11,8 @@ import {
   simpleStartServer,
   simpleStop,
 } from './tools.js'
-import { type ExecutionContext } from 'ava'
+import { TestContext } from 'node:test'
+import { inspect } from 'node:util'
 
 export const DoCatch = function <T>(
   t: ExecutionContext,
@@ -45,42 +46,40 @@ export const clientLogger = function (
 }
 
 export const serverLogger = function (
-  t: ExecutionContext
 ): FreeSwitchClientLogger {
   return {
     // debug: (msg, obj) => { t.log('serverLogger:debug', msg, obj) },
     debug: () => {},
     info: (msg, obj) => {
-      t.log('serverLogger:info', msg, obj)
+      console.log('serverLogger:info', msg, obj)
     },
     error: (msg, obj) => {
-      t.log('serverLogger:error', msg, obj)
+      console.log('serverLogger:error', msg, obj)
     },
   }
 }
 
 export const responseLogger = function (
-  t: ExecutionContext
+  t: TestContext
 ): legacyESL.FreeSwitchResponseLogger {
   return {
     // debug: (msg, obj) => { t.log('responseLogger:debug', msg, obj) },
     debug: () => {},
     info: (msg, obj) => {
-      t.log('responseLogger:info', msg, obj)
+      t.diagnostic(`responseLogger:info ${inspect(msg)} ${inspect(obj)}`)
     },
     error: (msg, obj) => {
-      t.log('responseLogger:error', msg, obj)
+      t.diagnostic(`responseLogger:error ${inspect(msg)} ${inspect(obj)}`)
     },
   }
 }
 
-export const startClient = async (
-  t: ExecutionContext,
+const startClient = async (
+  t: TestContext,
   stdio: 'ignore' | 'inherit' = 'ignore'
 ): Promise<void> => {
   t.timeout(12 * second)
-  await simpleStartClient(t.log, stdio)
-  t.pass()
+  await simpleStartClient((...args) => t.diagnostic(args.join(' ')), stdio)
 }
 
 export const startServer = async (

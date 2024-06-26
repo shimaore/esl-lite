@@ -1,4 +1,5 @@
-import test from 'ava'
+import test from 'node:test'
+import assert from 'node:assert/strict'
 
 import { FreeSwitchClosedError, FreeSwitchResponse } from '../esl-lite.js'
 import { type Socket } from 'net'
@@ -18,6 +19,5 @@ test('01-args: should report properly on closed (bgapi)', async function (t) {
   const T = new FreeSwitchResponse(socket, logger(t))
   T.closed = true
   const res = await T.bgapi('foo', 1000)
-  t.log('Result', res)
-  t.true(res instanceof FreeSwitchClosedError, 'Expect FreeSwitchClosedError')
+  t.(res instanceof FreeSwitchClosedError, 'Expect FreeSwitchClosedError')
 })
