@@ -1,4 +1,4 @@
-import test from 'ava'
+import { after, before, describe, it } from 'node:test'
 
 import * as legacyESL from 'esl'
 
@@ -10,23 +10,25 @@ import {
   onceConnected,
 } from './utils.js'
 import { second, sleep } from './tools.js'
-import { FreeSwitchClient, type FreeSwitchResponse } from '../esl-lite.js'
+import { FreeSwitchClient } from '../esl-lite.js'
+import assert from 'node:assert'
 
 // Using UUID (in client mode)
 // ---------------------------
-test.before(startServer)
-test.after.always(stop)
+describe('10-uuid.spec', () => {
+before(() => startServer(), { timeout: 12*second })
+after(stop, { timeout: 12*second })
 
 const serverPort = 8022
 
 const domain = '127.0.0.1:5062'
 
 let server: legacyESL.FreeSwitchServer | null = null
-test.before(async (t) => {
+before(async () => {
   server = new legacyESL.FreeSwitchServer({
     all_events: true,
     my_events: false,
-    logger: serverLogger(t),
+    logger: serverLogger(),
   })
 
   const service = function (
@@ -36,22 +38,22 @@ test.before(async (t) => {
     void (async function () {
       try {
         const destination = data['variable_sip_req_user']
-        t.log('Service started', { destination })
+        console.info('Service started', { destination })
         switch (destination) {
           case 'answer-wait-30000':
-            t.log('Service answer')
+            console.info('Service answer')
             await call.command('answer')
-            t.log('Service wait 30s')
+            console.info('Service wait 30s')
             await sleep(30 * second)
             break
           default:
-            t.log(`Invalid destination ${destination}`)
+            console.info(`Invalid destination ${destination}`)
         }
-        t.log('Service hanging up')
+        console.info('Service hanging up')
         await call.hangup()
-        t.log('Service hung up')
+        console.info('Service hung up')
       } catch (ex) {
-        t.log(ex)
+        console.error(ex)
       }
     })()
   }
@@ -59,7 +61,7 @@ test.before(async (t) => {
   server.on('connection', service)
 
   server.on('error', function (error) {
-    console.log('Service', error)
+    console.error('Service', error)
   })
 
   await server.listen({
@@ -67,18 +69,16 @@ test.before(async (t) => {
   })
 })
 
-test.after.always(async (t) => {
-  t.timeout(10 * second)
+after(async () => {
   await sleep(7 * second)
   const count = await server?.getConnectionCount()
   await server?.close()
-  t.is(count, 0, `Oops, ${count} active connections leftover`)
-  t.log('Service closed')
-})
+  assert.strictEqual(count, 0, `Oops, ${count} active connections leftover`)
+  console.info('Service closed')
+}, { timeout: 10 * second })
 
-test('should handle UUID-based commands', async function (t) {
-  t.timeout(20000)
-  const logger = clientLogger(t)
+it('should handle UUID-based commands', { timeout: 20*second }, async () => {
+  const logger = clientLogger()
   const client = new FreeSwitchClient({
     port: serverPort,
     logger,
@@ -90,11 +90,12 @@ test('should handle UUID-based commands', async function (t) {
     `originate {origination_uuid=${originationUUID},origination_channel_name='1234'}sofia/test-server/sip:answer-wait-30000@${domain} &park`,
     20000
   )
+  let outcome = undefined
   if (res1 instanceof Error) {
-    t.fail(res1.message)
+    outcome = res1
   } else {
-    t.log(res1.body.response)
-    t.is(res1.body.response, `+OK ${originationUUID}\n`)
+    console.info(res1.body.response)
+    assert.strictEqual(res1.body.response, `+OK ${originationUUID}\n`)
   }
   await sleep(1000)
   const res2 = await call.command_uuid(
@@ -104,65 +105,76 @@ test('should handle UUID-based commands', async function (t) {
     1000
   )
   if (res2 instanceof Error) {
-    t.fail(res2.message)
+    outcome = res2
   } else {
-    t.is(res2.body.data['Hangup-Cause'], 'NORMAL_CLEARING')
+    assert.strictEqual(res2.body.data['Hangup-Cause'], 'NORMAL_CLEARING')
   }
   client.end()
+  if (outcome instanceof Error) {
+    throw outcome
+  }
 })
 
-test('should map sequential responses', async function (t) {
+it('should map sequential responses', async function () {
   const client = new FreeSwitchClient({
     port: serverPort,
-    logger: clientLogger(t),
+    logger: clientLogger(),
   })
   client.connect()
   const call = await onceConnected(client)
   const res1 = await call.bgapi('create_uuid', 100)
+  let outcome = undefined
   if (res1 instanceof Error) {
-    t.fail(res1.message)
+    outcome = res1
   } else {
     const uuid1 = res1.body.response
     const res2 = await call.bgapi('create_uuid', 100)
     if (res2 instanceof Error) {
-      t.fail(res2.message)
+      outcome = res2
     } else {
       const uuid2 = res2.body.response
-      t.is(typeof uuid1, 'string')
-      t.is(typeof uuid2, 'string')
-      t.not(uuid1, uuid2, 'UUIDs should be unique')
+      assert.strictEqual(typeof uuid1, 'string')
+      assert.strictEqual(typeof uuid2, 'string')
+      assert.notStrictEqual(uuid1, uuid2, 'UUIDs should be unique')
     }
   }
   client.end()
+  if (outcome instanceof Error) {
+    throw outcome
+  }
 })
 
-test('should map sequential responses (using bgapi)', async function (t) {
+it('should map sequential responses (using bgapi)', async function () {
   const client = new FreeSwitchClient({
     port: serverPort,
-    logger: clientLogger(t),
+    logger: clientLogger(),
   })
   client.connect()
   const call = await onceConnected(client)
   const res1 = await call.bgapi('create_uuid', 100)
+  let outcome = undefined
   if (res1 instanceof Error) {
-    t.fail(res1.message)
+    outcome = res1
   } else {
     const uuid1 = res1.body.response
     const res2 = await call.bgapi('create_uuid', 100)
     if (res2 instanceof Error) {
-      t.fail(res2.message)
+      outcome = res2
     } else {
       const uuid2 = res2.body.response
-      t.not(uuid1, uuid2, 'UUIDs should be unique')
+      assert.notStrictEqual(uuid1, uuid2, 'UUIDs should be unique')
     }
   }
   client.end()
+  if (outcome instanceof Error) {
+    throw outcome
+  }
 })
 
-test('should map sequential responses (sent in parallel)', async function (t) {
+it('should map sequential responses (sent in parallel)', async function () {
   const client = new FreeSwitchClient({
     port: serverPort,
-    logger: clientLogger(t),
+    logger: clientLogger(),
   })
   client.connect()
   const call = await onceConnected(client)
@@ -170,9 +182,9 @@ test('should map sequential responses (sent in parallel)', async function (t) {
   let uuid2: string | undefined
   const p1 = call.bgapi('create_uuid', 200).then((res): null => {
     if (res instanceof Error) {
-      return t.fail(res.message)
+      throw res
     }
-    t.is(typeof res.body.response, 'string')
+    assert.strictEqual(typeof res.body.response, 'string')
     if (typeof res.body.response === 'string') {
       uuid1 = res.body.response
     }
@@ -180,9 +192,9 @@ test('should map sequential responses (sent in parallel)', async function (t) {
   })
   const p2 = call.bgapi('create_uuid', 200).then((res): null => {
     if (res instanceof Error) {
-      return t.fail(res.message)
+      throw res
     }
-    t.is(typeof res.body.response, 'string')
+    assert.strictEqual(typeof res.body.response, 'string')
     if (typeof res.body.response === 'string') {
       uuid2 = res.body.response
     }
@@ -190,15 +202,15 @@ test('should map sequential responses (sent in parallel)', async function (t) {
   })
   await Promise.all([p1, p2])
   client.end()
-  t.true(uuid1 != null, 'Not sequential')
-  t.true(uuid2 != null, 'Not sequential')
-  t.not(uuid1, uuid2, 'UUIDs should be unique')
+  assert(uuid1 != null, 'Not sequential')
+  assert(uuid2 != null, 'Not sequential')
+  assert.notStrictEqual(uuid1, uuid2, 'UUIDs should be unique')
 })
 
-test('should work with parallel responses (using bgapi)', async function (t) {
+it('should work with parallel responses (using bgapi)', async function () {
   const client = new FreeSwitchClient({
     port: serverPort,
-    logger: clientLogger(t),
+    logger: clientLogger(),
   })
   client.connect()
   const call = await onceConnected(client)
@@ -206,32 +218,31 @@ test('should work with parallel responses (using bgapi)', async function (t) {
   let uuid2 = null
   const p1 = call.bgapi('create_uuid', 100).then((res): null => {
     if (res instanceof Error) {
-      return t.fail(res.message)
+      throw res
     }
-    t.is(typeof res.body.response, 'string')
+    assert.strictEqual(typeof res.body.response, 'string')
     uuid1 = res.body.response
     return null
   })
   const p2 = call.bgapi('create_uuid', 100).then((res): null => {
     if (res instanceof Error) {
-      return t.fail(res.message)
+      throw res
     }
-    t.is(typeof res.body.response, 'string')
+    assert.strictEqual(typeof res.body.response, 'string')
     uuid2 = res.body.response
     return null
   })
   await Promise.all([p1, p2])
   client.end()
-  t.true(uuid1 != null, 'Not sequential')
-  t.true(uuid2 != null, 'Not sequential')
-  t.not(uuid1, uuid2, 'UUIDs should be unique')
+  assert(uuid1 != null, 'Not sequential')
+  assert(uuid2 != null, 'Not sequential')
+  assert.notStrictEqual(uuid1, uuid2, 'UUIDs should be unique')
 })
 
-test('should handle errors', async function (t) {
-  t.timeout(2000)
+it('should handle errors', { timeout: 2000 }, async function () {
   const client = new FreeSwitchClient({
     port: serverPort,
-    logger: clientLogger(t),
+    logger: clientLogger(),
   })
   client.connect()
   const call = await onceConnected(client)
@@ -251,15 +262,17 @@ test('should handle errors', async function (t) {
     )
     const now = process.hrtime.bigint()
     const duration = now - ref
-    t.true(duration > 1000000000n)
-    t.true(duration < 1200000000n)
+    assert(duration > 1000000000n)
+    assert(duration < 1200000000n)
     if (res instanceof Error) {
-      return t.fail(res.message)
+      throw res
     }
-    t.like(res.body.data, {
-      'Answer-State': 'hangup',
-      'Hangup-Cause': 'NO_PICKUP',
-    })
+    if ('Answer-State' in res.body.data && res.body.data['Answer-State'] === 'hangup' &&
+        'Hangup-Cause' in res.body.data && res.body.data['Hangup-Cause'] === 'NO_PICKUP') {
+      true
+    } else {
+      throw new Error('invalid content')
+    }
   })()
   await sleep(1000)
   await call.hangup_uuid(originationUUID, 'NO_PICKUP')
@@ -267,76 +280,4 @@ test('should handle errors', async function (t) {
   client.end()
   await p
 })
-
-// Test DTMF
-// ---------
-
-// This test should work but I haven't taken the time to finalize it.
-test.skip('should detect DTMF', async function (t) {
-  t.timeout(9000)
-  const server = new legacyESL.FreeSwitchServer({
-    all_events: false,
-    logger: clientLogger(t),
-  })
-  server.on('connection', function (call) {
-    void (async function () {
-      try {
-        await call.event_json('DTMF')
-        await call.api('sofia global siptrace on')
-        await call.command('answer')
-        await call.command('start_dtmf')
-        t.log('answered')
-        await call.command('sleep', '10000')
-        await sleep(10000)
-        call.end()
-      } catch (ex) {
-        t.log(ex)
-        t.fail()
-      }
-    })()
-  })
-  await server.listen({ port: 7012 })
-  const client = new FreeSwitchClient({
-    port: serverPort,
-    logger: clientLogger(t),
-  })
-  client.on('connect', function (call: FreeSwitchResponse): void {
-    void (async function () {
-      try {
-        let coreUUID = null
-        call.on('CHANNEL_OUTGOING', function (msg) {
-          coreUUID = msg.body.uniqueID
-          t.log('CHANNEL_OUTGOING', { coreUUID })
-        })
-        await call.bgapi('sofia status', 200)
-        await call.bgapi('sofia global siptrace on', 200)
-        const msg = await call.bgapi(
-          `originate sofia/test-server/sip:server7012@${domain} &park`,
-          9000
-        )
-        if (msg instanceof Error) {
-          return t.fail(msg.message)
-        }
-        const $ = (msg.headers.replyText ?? 'NONE').match(/\+OK ([\da-f-]+)/)
-        if ($ != null) {
-          const channelUUID = $[1]
-          t.log('originate', { channelUUID })
-          await sleep(2000)
-          const msg = await call.bgapi(
-            `uuid_send_dtmf ${channelUUID} 1234`,
-            4000
-          )
-          t.log('api', msg)
-          await sleep(5000)
-          t.pass()
-        } else {
-          t.fail()
-        }
-      } catch (ex) {
-        t.log(ex)
-        t.fail()
-      }
-    })()
-  })
-  client.connect()
 })

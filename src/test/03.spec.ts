@@ -1,4 +1,4 @@
-import test from 'ava'
+import { after, before, describe, it } from 'node:test'
 
 import {
   start,
@@ -8,6 +8,9 @@ import {
   DoCatch,
   onceConnected,
 } from './utils.js'
+import {
+  inspect
+} from 'node:util'
 
 import * as legacyESL from 'esl'
 import { FreeSwitchClient, FreeSwitchFailedCommandError } from '../esl-lite.js'
@@ -17,22 +20,23 @@ import { ulid } from 'ulidx'
 const clientPort = 8024
 const domain = '127.0.0.1:5062'
 
-test.before(start)
-test.after.always(stop)
+describe('03.spec', () => {
+before(start)
+after(stop)
 
-test('03-ok', async (t) => {
+it('03-ok', async (t) => {
   const server = new legacyESL.FreeSwitchServer({
     all_events: false,
-    logger: serverLogger(t),
+    logger: serverLogger(),
   })
   server.once('connection', (call) => {
     DoCatch(t, async () => {
-      t.log('server: call command answer')
+      t.diagnostic('server: call command answer')
       await call.command('answer')
       await sleep(10_000)
-      t.log('server: call command hangup')
+      t.diagnostic('server: call command hangup')
       await call.command('hangup')
-      t.log('server: call end')
+      t.diagnostic('server: call end')
       call.end()
     })
   })
@@ -40,31 +44,33 @@ test('03-ok', async (t) => {
 
   const client = new FreeSwitchClient({
     port: clientPort,
-    logger: clientLogger(t),
+    logger: clientLogger(),
   })
   const p = onceConnected(client)
   client.connect()
   const service = await p
-  t.log('client: service bgapi originate')
+  t.diagnostic('client: service bgapi originate')
   const uuid = ulid()
   const res = await service.bgapi(
     `originate {origination_uuid=${uuid}}sofia/test-client/sip:server7002@${domain} &park`,
     1000
   )
-  t.log('bgapi response', res)
+  t.diagnostic('bgapi response: ' + inspect(res))
+  let outcome = undefined
   if (res instanceof Error) {
-    t.fail(res.message)
+    outcome = new Error(res.message)
   } else {
-    t.log('client: service hangup')
+    t.diagnostic('client: service hangup')
     const res2 = await service.hangup_uuid(uuid)
     if (res2 instanceof FreeSwitchFailedCommandError) {
-      t.fail(res2.response)
+      outcome = new Error(res2.response)
     } else if (res2 instanceof Error) {
-      t.fail(res2.message)
+      outcome = new Error(res2.message)
     }
   }
-  t.log('client: end')
+  t.diagnostic('client: end')
   client.end()
   await server.close()
-  t.pass()
+  if (outcome instanceof Error) { throw outcome }
+})
 })

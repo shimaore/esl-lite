@@ -6,95 +6,82 @@ import {
 } from '../esl-lite.js'
 import type * as legacyESL from 'esl'
 import {
-  second,
   simpleStartClient,
   simpleStartServer,
   simpleStop,
 } from './tools.js'
-import { type ExecutionContext } from 'ava'
+import { TestContext } from 'node:test'
+import { inspect } from 'node:util'
 
 export const DoCatch = function <T>(
-  t: ExecutionContext,
+  t: TestContext,
   f: () => Promise<T>
 ): void {
-  void f().catch(t.log)
+  void f().catch(t.diagnostic.bind(t))
 }
 
 export const start = async (
-  t: ExecutionContext,
-  stdio: 'ignore' | 'inherit' = 'ignore'
 ): Promise<void> => {
-  t.timeout(12 * second)
-  await Promise.all([startClient(t, stdio), startServer(t, stdio)])
-  t.pass()
+  await Promise.all([startClient('ignore'), startServer('ignore')])
 }
 
 export const clientLogger = function (
-  t: ExecutionContext
 ): FreeSwitchClientLogger {
   return {
     // debug: (msg, obj) => { t.log('clientLogger:debug', msg, obj) },
     debug: () => {},
     info: (msg, obj) => {
-      t.log('clientLogger:info', msg, obj)
+      console.info('clientLogger:info', msg, obj)
     },
     error: (msg, obj) => {
-      t.log('clientLogger:error', msg, obj)
+      console.error('clientLogger:error', msg, obj)
     },
   }
 }
 
 export const serverLogger = function (
-  t: ExecutionContext
 ): FreeSwitchClientLogger {
   return {
     // debug: (msg, obj) => { t.log('serverLogger:debug', msg, obj) },
     debug: () => {},
     info: (msg, obj) => {
-      t.log('serverLogger:info', msg, obj)
+      console.info('serverLogger:info', msg, obj)
     },
     error: (msg, obj) => {
-      t.log('serverLogger:error', msg, obj)
+      console.error('serverLogger:error', msg, obj)
     },
   }
 }
 
 export const responseLogger = function (
-  t: ExecutionContext
+  t: TestContext
 ): legacyESL.FreeSwitchResponseLogger {
   return {
     // debug: (msg, obj) => { t.log('responseLogger:debug', msg, obj) },
     debug: () => {},
     info: (msg, obj) => {
-      t.log('responseLogger:info', msg, obj)
+      t.diagnostic(`responseLogger:info ${inspect(msg)} ${inspect(obj)}`)
     },
     error: (msg, obj) => {
-      t.log('responseLogger:error', msg, obj)
+      t.diagnostic(`responseLogger:error ${inspect(msg)} ${inspect(obj)}`)
     },
   }
 }
 
-export const startClient = async (
-  t: ExecutionContext,
+const startClient = async (
   stdio: 'ignore' | 'inherit' = 'ignore'
 ): Promise<void> => {
-  t.timeout(12 * second)
-  await simpleStartClient(t.log, stdio)
-  t.pass()
+  await simpleStartClient((...args) => console.warn(args.join(' ')), stdio)
 }
 
 export const startServer = async (
-  t: ExecutionContext,
   stdio: 'ignore' | 'inherit' = 'ignore'
 ): Promise<void> => {
-  t.timeout(12 * second)
-  await simpleStartServer(t.log, stdio)
-  t.pass()
+  await simpleStartServer(console.info, stdio)
 }
 
-export const stop = async (t: ExecutionContext): Promise<void> => {
-  t.timeout(12 * second)
-  await simpleStop(t.log)
+export const stop = async (): Promise<void> => {
+  await simpleStop(console.info)
 }
 
 export const onceConnected = async (

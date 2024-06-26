@@ -1,11 +1,10 @@
-import test from 'ava'
+import { after, before, describe, it } from 'node:test'
 
 import {
   start,
   stop,
   clientLogger as logger,
   clientLogger,
-  DoCatch,
   onceConnected,
 } from './utils.js'
 
@@ -15,6 +14,8 @@ import { v4 as uuidv4 } from 'uuid'
 
 import { second, sleep, timer, optionsText } from './tools.js'
 import { FreeSwitchClient } from '../esl-lite.js'
+import assert from 'node:assert'
+import { inspect } from 'node:util'
 
 const domain = '127.0.0.1:5062'
 
@@ -28,16 +29,18 @@ const cps = 2
 
 const clientPort = 8024
 
-test.before(start)
-test.after.always(stop)
+describe('15-base-client.spec', () => {
 
-test.before('15-base-client: start service', async function (t) {
+before(start, { timeout: 12*second })
+after(stop, { timeout: 12*second })
+
+before(async function () {
   const service = async function (
     call: legacyESL.FreeSwitchResponse,
     { data }: { data: legacyESL.StringMap }
   ): Promise<void> {
     const destination = data['variable_sip_req_user']
-    t.log('received call', destination)
+    console.info('received call', destination)
     switch (destination) {
       case 'answer-wait-15000':
         await call.command('answer')
@@ -56,45 +59,42 @@ test.before('15-base-client: start service', async function (t) {
         await call.command('hangup', '200 answer-wait-3000').catch(() => true)
         break
       default:
-        t.log(`Invalid destination ${destination}`)
+        console.info(`Invalid destination ${destination}`)
         throw new Error(`Invalid destination ${destination}`)
     }
   }
   server = new legacyESL.FreeSwitchServer({
     all_events: false,
-    logger: clientLogger(t),
+    logger: clientLogger(),
   })
   server.on('connection', function (call, args: { data: legacyESL.StringMap }) {
-    DoCatch(t, async function () {
-      t.log('Server-side', call, args)
+    ;(async function () {
+      // console.info('Server-side', call, args)
       try {
         await service(call, args)
       } catch (err) {
-        t.log('Server-side error', err)
+        console.info('Server-side error', err)
       }
-    })
+    })().catch( console.error )
   })
   await server.listen({
     port: 7000,
   })
 })
 
-test.after.always(async function (t) {
-  t.timeout(10 * second)
+after(async function () {
   await sleep(8 * second)
   const count = await server.getConnectionCount()
   if (count > 0) {
     throw new Error(`Oops, ${count} active connections leftover`)
   }
   await server?.close()
-  t.pass()
-})
+}, { timeout: 10 * second })
 
-test('15-base-client: should detect leg_progress_timeout', async function (t) {
-  t.timeout(4 * second)
+void it('15-base-client: should detect leg_progress_timeout', { timeout: 4 * second }, async function () {
   const client = new FreeSwitchClient({
     port: clientPort,
-    logger: logger(t),
+    logger: logger(),
   })
   const p = onceConnected(client)
   client.connect()
@@ -110,17 +110,16 @@ test('15-base-client: should detect leg_progress_timeout', async function (t) {
   )
   client.end()
   if (res instanceof Error) {
-    t.fail(res.message)
+    throw res
   } else {
-    t.is(res.body.response, '-ERR PROGRESS_TIMEOUT\n')
+    assert.strictEqual(res.body.response, '-ERR PROGRESS_TIMEOUT\n')
   }
 })
 
-test('15-base-client: should detect leg_timeout', async function (t) {
-  t.timeout(4 * second)
+void it('15-base-client: should detect leg_timeout', { timeout: 4 * second }, async function () {
   const client = new FreeSwitchClient({
     port: clientPort,
-    logger: logger(t),
+    logger: logger(),
   })
   const p = onceConnected(client)
   client.connect()
@@ -136,17 +135,16 @@ test('15-base-client: should detect leg_timeout', async function (t) {
   )
   client.end()
   if (res instanceof Error) {
-    t.fail(res.message)
+    throw res
   } else {
-    t.is(res.body.response, '-ERR ALLOTTED_TIMEOUT\n')
+    assert.strictEqual(res.body.response, '-ERR ALLOTTED_TIMEOUT\n')
   }
 })
 
-test('15-base-client: should detect hangup', async function (t) {
-  t.timeout(18 * second)
+void it('15-base-client: should detect hangup', { timeout: 18 * second }, async function () {
   const client = new FreeSwitchClient({
     port: clientPort,
-    logger: logger(t),
+    logger: logger(),
   })
   const p = onceConnected(client)
   client.connect()
@@ -159,8 +157,8 @@ test('15-base-client: should detect hangup', async function (t) {
   service.on('CHANNEL_HANGUP', function (msg) {
     if (msg.body.data['variable_tracer_uuid'] === id) {
       const d = duration()
-      t.true(d > 14 * second)
-      t.true(d < 16 * second)
+      assert(d > 14 * second)
+      assert(d < 16 * second)
     }
   })
   await service.bgapi(
@@ -172,15 +170,15 @@ test('15-base-client: should detect hangup', async function (t) {
 })
 
 // This is a simple test to make sure the client can work with both legs.
-test('15-base-client: should work with simple routing', async function (t) {
-  const count = 40
+const count = 40
+void it('15-base-client: should work with simple routing', { timeout: (4000 * count) / cps }, async function (t) {
   let sent = 0
-  t.timeout((4000 * count) / cps)
   let caughtClient = 0
+  let outcome = undefined
   const newCall = function (): void {
     const client = new FreeSwitchClient({
       port: clientPort,
-      logger: logger(t),
+      logger: logger(),
     })
     client.on('connect', function (call): void {
       void (async function () {
@@ -193,9 +191,9 @@ test('15-base-client: should work with simple routing', async function (t) {
           await sleep(4000)
           client.end()
         } catch (error) {
-          t.fail()
+          outcome = 'failed'
           caughtClient++
-          t.log(`Caught ${caughtClient} client errors.`, error)
+          t.diagnostic(`Caught ${caughtClient} client errors: ${inspect(error)}`)
         }
       })()
     })
@@ -209,5 +207,9 @@ test('15-base-client: should work with simple routing', async function (t) {
     setTimeout(newCall, (i * second) / cps)
   }
   await sleep((4000 * count) / cps - 500)
-  t.true(sent / 2 === count)
+  assert(sent / 2 === count)
+  if (outcome != null) {
+    throw new Error(outcome)
+  }
+})
 })

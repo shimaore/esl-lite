@@ -1,11 +1,10 @@
-import test from 'ava'
+import { after, before, describe, it } from 'node:test'
 
 import {
   start,
   stop,
   clientLogger,
   serverLogger,
-  DoCatch,
   onceConnected,
 } from './utils.js'
 
@@ -13,6 +12,8 @@ import * as legacyESL from 'esl'
 
 import { second, sleep } from './tools.js'
 import { FreeSwitchClient } from '../esl-lite.js'
+import assert from 'node:assert'
+import { inspect } from 'node:util'
 
 const domain = '127.0.0.1:5062'
 
@@ -26,16 +27,17 @@ let server: legacyESL.FreeSwitchServer | null = null
 
 const clientPort = 8024
 
+void describe('14-base-server.spec', () => {
 const ev = new legacyESL.FreeSwitchEventEmitter()
 
-test.before('14-base-server: start service', async function (t) {
+before(async function () {
   const service = async function (
     call: legacyESL.FreeSwitchResponse,
     { data }: { data: legacyESL.StringMap }
   ): Promise<void> {
-    t.log({ data })
+    // console.info({ data })
     const destination = data['variable_sip_req_user']
-    t.log('service to', destination)
+    console.info('service to', destination)
     switch (destination) {
       case 'answer-wait-3020': {
         await call.command('answer')
@@ -45,14 +47,14 @@ test.before('14-base-server: start service', async function (t) {
       }
       case 'server7002': {
         const res = await call.command('answer')
-        t.is(res.body['Channel-Call-State'], 'ACTIVE')
+        assert.strictEqual(res.body['Channel-Call-State'], 'ACTIVE')
         await call.command('hangup', '200 server7002')
         ev.emit('server7002')
         break
       }
       case 'server7003': {
         const res = await call.command('answer')
-        t.is(res.body['Channel-Call-State'], 'ACTIVE')
+        assert.strictEqual(res.body['Channel-Call-State'], 'ACTIVE')
         await call.command('hangup', '200 server7003')
         ev.emit('server7003')
         break
@@ -69,108 +71,112 @@ test.before('14-base-server: start service', async function (t) {
         break
       }
       default:
-        t.log(`Invalid destination ${destination}`)
+        console.error(`Invalid destination ${destination}`)
     }
     call.end()
   }
   server = new legacyESL.FreeSwitchServer({
     all_events: false,
-    logger: serverLogger(t),
+    logger: serverLogger(),
   })
   server.on('connection', function (call, args) {
-    t.log('service received connection')
-    DoCatch(t, async () => {
-      t.log('Server-side', call, args)
+    console.info('service received connection')
+    ;(async () => {
+      // console.info('Server-side', call, args)
       try {
         await service(call, args)
       } catch (err) {
-        t.log('Server-side error', err)
+        console.info('Server-side error', err)
       }
-    })
+    })().catch( console.error )
   })
   await server.listen({
     host: '127.0.0.1',
     port: 7000,
   })
-  t.log('Service up')
-  t.pass()
+  console.info('Service up')
 })
 
-test.after.always('14-base-server: stop service', async function (t) {
-  t.timeout(10 * second)
+after(async function () {
   await sleep(8 * second)
   const count = await server?.getConnectionCount()
+  let outcome = undefined
   if (count == null || count > 0) {
-    t.fail(`Oops, ${count} active connections leftover`)
+    outcome = `Oops, ${count} active connections leftover`
   }
   await server?.close()
-  t.log('Service down', server?.stats)
+  console.info('Service down', server?.stats)
   server = null
-  t.pass()
-})
+  if (outcome != null) {
+    throw new Error(outcome)
+  }
+}, { timeout: 10 * second })
 
-test.before(start)
-test.after.always(stop)
+before(start, { timeout: 12*second })
+after(stop, { timeout: 12*second })
 
-test('14-base-server: should handle one call', async function (t) {
-  t.timeout(5 * second)
-  t.plan(1)
+void it('14-base-server: should handle one call', { timeout: 5 * second }, async function () {
+  let expectedOutcome = 1
   const client = new FreeSwitchClient({
     port: clientPort,
-    logger: clientLogger(t),
+    logger: clientLogger(),
   })
   const p = onceConnected(client)
   client.connect()
   const service = await p
   ev.on('server7002', function () {
     client.end()
-    t.pass()
+    expectedOutcome--
   })
   await service.bgapi(
     `originate sofia/test-client/sip:server7002@${domain} &bridge(sofia/test-client/sip:answer-wait-3020@${domain})`,
     4000
   )
   await sleep(3500)
+  if (expectedOutcome !== 0) {
+    throw new Error(`failed`)
+  }
 })
 
-test('14-base-server: should handle one call (bgapi)', async function (t) {
-  t.timeout(4 * second)
-  t.plan(1)
+void it('14-base-server: should handle one call (bgapi)', { timeout: 4 * second }, async function () {
+  let expectedOutcome = 1
   const client = new FreeSwitchClient({
     port: clientPort,
-    logger: clientLogger(t),
+    logger: clientLogger(),
   })
   const p = onceConnected(client)
   client.connect()
   const service = await p
   ev.on('server7003', function () {
     client.end()
-    t.pass()
+    expectedOutcome--
   })
   await service.bgapi(
     `originate sofia/test-client/sip:server7003@${domain} &bridge(sofia/test-client/sip:answer-wait-3020@${domain})`,
     4000
   )
   await sleep(3500)
+  if (expectedOutcome !== 0) {
+    throw new Error(`failed`)
+  }
 })
 
 // The `exit` command normally triggers automatic cleanup for linger
 // -----------------------------------------------------------------
 
 // Automatic cleanup should trigger a `cleanup_linger` event if we're using linger mode.
-test('14-base-server: should linger on exit', async function (t) {
-  t.timeout(4 * second)
-  t.plan(1)
+void it('14-base-server: should linger on exit', { timeout: 4 * second }, async function (t) {
+  let expectedOutcome = 1
   const client = new FreeSwitchClient({
     port: clientPort,
-    logger: clientLogger(t),
+    logger: clientLogger(),
   })
   const p = onceConnected(client)
   client.connect()
   const service = await p
   ev.on('server7008', function () {
     client.end()
-    t.pass()
+    expectedOutcome--
   })
   try {
     await service.bgapi(
@@ -178,7 +184,11 @@ test('14-base-server: should linger on exit', async function (t) {
       4000
     )
   } catch (err) {
-    t.log('responded with', err)
+    t.diagnostic(`responded with ${inspect(err)}`)
   }
   await sleep(3500)
+  if (expectedOutcome !== 0) {
+    throw new Error(`failed`)
+  }
+})
 })

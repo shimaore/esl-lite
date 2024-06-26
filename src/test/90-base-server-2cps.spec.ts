@@ -1,4 +1,4 @@
-import test from 'ava'
+import { after, before, describe, it } from 'node:test'
 
 import { FreeSwitchClient, once, FreeSwitchEventEmitter } from '../esl-lite.js'
 
@@ -7,11 +7,11 @@ import {
   stop,
   clientLogger as logger,
   clientLogger,
-  DoCatch,
 } from './utils.js'
 
 import { second, sleep } from './tools.js'
 import * as legacyESL from 'esl'
+import assert from 'node:assert'
 
 const domain = '127.0.0.1:5062'
 
@@ -46,13 +46,14 @@ const server2 = {
   },
 }
 
+void describe('90-base-server-2cps.spec', () => {
 // We implement a small LCR database using PouchDB.
 const ev = new FreeSwitchEventEmitter<
   'server7022',
   { server7022: () => void }
 >()
 
-test.before(async function (t) {
+before(async function () {
   const db = new Map<string, { _id: string; comment: string; target: string }>()
   db.set('route:', {
     _id: 'route:',
@@ -116,7 +117,7 @@ test.before(async function (t) {
           `bridge sip:answer-wait-3000-${doc.target}@${domain}`
         )
       } else {
-        t.log(`No route for ${dest}`)
+        console.error(`No route for ${dest}`)
         await call.hangup(`500 no route for ${dest}`)
       }
       return
@@ -132,13 +133,13 @@ test.before(async function (t) {
         await call.command('hangup', '200 answer-wait-3050')
         break
       case 'server7022':
-        t.log('Received server7022')
+        console.info('Received server7022')
         await call.command('set', 'a=2')
         await call.command('set', 'b=3')
         await call.command('set', 'c=4')
-        t.log('Received server7022: calling exit')
+        console.info('Received server7022: calling exit')
         await call.exit()
-        t.log('Received server7022: sending event')
+        console.info('Received server7022: sending event')
         ev.emit('server7022', undefined)
         break
       case 'server7004': {
@@ -149,7 +150,7 @@ test.before(async function (t) {
           return server1.stats.completed++
         })
         const res = await call.command('answer')
-        t.is(res.body['Channel-Call-State'], 'ACTIVE')
+        assert.strictEqual(res.body['Channel-Call-State'], 'ACTIVE')
         server1.stats.answered++
         await sleep(3000)
         await call.hangup('200 server7004')
@@ -161,7 +162,7 @@ test.before(async function (t) {
           return server2.stats.completed++
         })
         const res = await call.command('answer')
-        t.is(res.body['Channel-Call-State'], 'ACTIVE')
+        assert.strictEqual(res.body['Channel-Call-State'], 'ACTIVE')
         server2.stats.answered++
         break
       }
@@ -171,19 +172,19 @@ test.before(async function (t) {
   }
   server = new legacyESL.FreeSwitchServer({
     all_events: false,
-    logger: clientLogger(t),
+    logger: clientLogger(),
   })
   server.on(
     'connection',
     function (call, args: { data: legacyESL.StringMap }): void {
-      DoCatch(t, async function () {
-        t.log('Server-side', call, args)
+      void (async function () {
+        // console.info('Server-side', call, args)
         try {
           await service(call, args)
         } catch (err) {
-          t.log('Server-side error', err)
+          console.error('Server-side error', err)
         }
-      })
+      })()
     }
   )
   await server.listen({
@@ -192,30 +193,27 @@ test.before(async function (t) {
   await sleep(1 * second)
 })
 
-test.after.always(async function (t) {
-  t.timeout(10 * second)
+after(async function () {
   await sleep(8 * second)
   const count = await server.getConnectionCount()
   if (count > 0) {
     throw new Error(`Oops, ${count} active connections leftover`)
   }
   await server.close()
-  t.pass()
-})
+}, { timeout: 10*second })
 
-test.before(start)
-test.after.always(stop)
+before(start, { timeout: 12*second })
+after(stop, { timeout: 12*second })
 
-test('should handle many calls', async function (t): Promise<void> {
-  const count = 20
-  t.timeout((count / cps) * second + 7000)
+const count = 20
+void it('should handle many calls', { timeout: (count / cps) * second + 7000 }, async function (t): Promise<void> {
   let sent = 0
   const newCall = function (): void {
     void (async function () {
       try {
         const client = new FreeSwitchClient({
           port: clientPort,
-          logger: logger(t),
+          logger: logger(),
         })
         const p = once(client, 'connect')
         client.connect()
@@ -227,8 +225,8 @@ test('should handle many calls', async function (t): Promise<void> {
         sent += 1
         client.end()
       } catch (ex) {
-        t.log(ex)
-        t.fail()
+        t.diagnostic(`${ex}`)
+        throw ex
       }
     })()
   }
@@ -242,10 +240,10 @@ test('should handle many calls', async function (t): Promise<void> {
   // Success criteria is that we received disconnect notifications from FreeSwitch for all calls.
   // This might fail for example because FreeSwitch runs out of CPU and starts sending 503 (max-cpu) errors back, meaning the client is unable to send all calls through up to our servers.
   await sleep((count / cps) * second + 6000)
-  t.log(
+  t.diagnostic(
     `sent=${sent} count=${count} server1.stats.completed=${server1.stats.completed} server2.stats.completed=${server2.stats.completed}`
   )
-  t.true(
+  assert(
     sent === count &&
       server1.stats.completed === count &&
       server2.stats.completed === count
@@ -254,15 +252,13 @@ test('should handle many calls', async function (t): Promise<void> {
 
 // Minimal LCR
 // -----------
-test('should do LCR', async function (t) {
-  const count = 20
-  t.timeout((count / cps) * second + 9000)
+void it('should do LCR', { timeout: (count / cps) * second + 9000 }, async function (t) {
   let sent = 0
   const newCall = function (): void {
     void (async function () {
       const client = new FreeSwitchClient({
         port: clientPort,
-        logger: logger(t),
+        logger: logger(),
       })
       const p = once(client, 'connect')
       client.connect()
@@ -286,19 +282,18 @@ test('should do LCR', async function (t) {
     setTimeout(newCall, (i * second) / cps)
   }
   await sleep((count / cps) * second + 8000)
-  t.log(
+  t.diagnostic(
     `sent=${sent} count=${count} server1.stats.completed=${server1.stats.completed} server2.stats.completed=${server2.stats.completed}`
   )
-  t.true(sent === count && server3.stats.completed === count)
+  assert(sent === count && server3.stats.completed === count)
 })
 
 // Multiple, chained commands
 // ==========================
-test('should handle chained commands', async function (t) {
-  t.timeout(2000)
+void it('should handle chained commands', { timeout: 2000 }, async function (t) {
   const client = new FreeSwitchClient({
     port: clientPort,
-    logger: logger(t),
+    logger: logger(),
   })
   const p = once(client, 'connect')
   client.connect()
@@ -308,19 +303,20 @@ test('should handle chained commands', async function (t) {
     `originate sofia/test-client/sip:server7022@${domain} &park`,
     8000
   )
-  t.log(res)
+  t.diagnostic(`${res}`)
   if (res instanceof Error) {
-    t.fail(res.message)
+    throw res
   } else {
     const { response } = res.body
     if (typeof response === 'string') {
-      t.is(response, '-ERR NORMAL_CLEARING\n')
+      assert.strictEqual(response, '-ERR NORMAL_CLEARING\n')
     } else {
-      t.fail('response is not a string')
-      t.log(response)
+      t.diagnostic(`${response}`)
+      throw new Error('response is not a string')
     }
   }
   await q
-  t.pass()
   client.end()
+})
+
 })

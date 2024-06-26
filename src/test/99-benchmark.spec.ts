@@ -1,4 +1,4 @@
-import test from 'ava'
+import { after, before, describe, it } from 'node:test'
 
 import { FreeSwitchClient } from '../esl-lite.js'
 
@@ -6,6 +6,7 @@ import * as legacyESL from 'esl'
 
 import { clientLogger, start, stop } from './utils.js'
 import { second, sleep } from './tools.js'
+import { inspect } from 'node:util'
 
 const clientPort = 8024
 
@@ -13,18 +14,17 @@ const dialplanPort = 7000
 
 const domain = '127.0.0.1:5062'
 
-test.before(start)
-test.after.always(async function (t) {
-  t.timeout(50 * second)
+void describe('99-benchmark.spec', () => {
+before(start, { timeout: 12*second })
+after(async function () {
   // Ava runs tests in parallel, so let's wait long enough for the other tests to
   // complete!
   await sleep(30 * second)
-  await stop(t)
-})
+  await stop()
+}, { timeout: 50 * second })
 
-test('should be reachable', async function (t) {
-  t.timeout(35 * second)
-  const logger = clientLogger(t)
+void it('should be reachable', { timeout: 35 * second }, async function (t) {
+  const logger = clientLogger()
   const client = new FreeSwitchClient({
     port: clientPort,
     logger,
@@ -43,7 +43,7 @@ test('should be reachable', async function (t) {
   })
   const report = function (): void {
     void (async function () {
-      t.log({
+      t.diagnostic(inspect({
         server: server.stats,
         server2: server2.stats,
         connection_count: await server.getConnectionCount(),
@@ -52,7 +52,7 @@ test('should be reachable', async function (t) {
         sentCalls,
         receivedCalls,
         receivedCompletedCalls,
-      })
+      }))
     })()
   }
   const timer = setInterval(report, 1000)
@@ -68,7 +68,7 @@ test('should be reachable', async function (t) {
         await call.hangup()
         receivedCompletedCalls++
       } catch (err) {
-        t.log('------ receiving side', err)
+        t.diagnostic(`------ receiving side ${err}`)
       }
     })()
   }
@@ -77,9 +77,10 @@ test('should be reachable', async function (t) {
   const attempts = 500n
   let runs = attempts
   let sentCalls = 0n
+  let failures = 0
   client.on('connect', function (service): void {
     void (async function () {
-      t.log('---------- service ------------')
+      t.diagnostic('---------- service ------------')
       try {
         let running = true
         while (runs-- > 0 && running) {
@@ -93,14 +94,14 @@ test('should be reachable', async function (t) {
               sentCalls++
             } catch (error) {
               const err = error
-              t.log('------ stopped run -----', err)
+              t.diagnostic(`------ stopped run ----- ${err}`)
               running = false
             }
           })()
         }
       } catch (ex) {
-        t.log(ex)
-        t.fail()
+        t.diagnostic(`${ex}`)
+        failures++
       }
     })()
   })
@@ -110,12 +111,14 @@ test('should be reachable', async function (t) {
   client.end()
   await server.close()
   await server2.close()
-  t.log(
+  t.diagnostic(
     `------ runs: ${runs} sent_calls: ${sentCalls} received_calls: ${receivedCalls} received_completed_calls: ${receivedCompletedCalls} ---------------`
   )
-  if (receivedCompletedCalls === attempts) {
-    t.pass()
+  if (receivedCompletedCalls === attempts && failures === 0) {
+    true
   } else {
-    t.fail()
+    throw new Error('failed')
   }
+})
+
 })

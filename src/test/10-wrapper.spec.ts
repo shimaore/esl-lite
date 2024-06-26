@@ -1,35 +1,36 @@
-import test from 'ava'
+import { describe, it } from 'node:test'
 
 import { type Socket, createServer } from 'node:net'
 
 import { sleep } from './tools.js'
 import { clientLogger, onceConnected } from './utils.js'
 import { FreeSwitchClient } from '../esl-lite.js'
+import { inspect } from 'node:util'
 
 const clientPort = 5624
 
-test('should send commands', async function (t) {
-  t.timeout(30000)
+describe('10-wrapper.spec', () => {
+it('should send commands', { timeout: 30000 }, async function (t) {
   let connection = 0
   const service = function (c: Socket): void {
-    t.log(`Server received ${++connection} connection`)
+    t.diagnostic(`Server received ${++connection} connection`)
     c.on('error', (error): void => {
-      t.log('Server received error', error)
+      t.diagnostic(`Server received error ${inspect(error)}`)
     })
     c.on('data', function (originalData) {
       void (async function () {
         try {
           const data = originalData.toString('utf-8')
-          t.log('Server received data', data)
+          t.diagnostic(`Server received data ${inspect(data)}`)
           await sleep(100)
-          t.log('Server writing (reply ok)')
+          t.diagnostic('Server writing (reply ok)')
           c.write(`Content-Type: command/reply
 Reply-Text: +OK accepted
 
 `)
           if (data.match(/bridge[^]*foo/) != null) {
             await sleep(100)
-            t.log('Server writing (execute-complete for bridge)')
+            t.diagnostic('Server writing (execute-complete for bridge)')
             const $ = data.match(/Event-UUID: (\S+)/i)
             if ($?.[1] != null) {
               const eventUUID = $[1]
@@ -47,7 +48,7 @@ Application-UUID: ${eventUUID}
           }
           if (data.match(/ping[^]*bar/) != null) {
             await sleep(100)
-            t.log('Server writing (execute-complete for ping)')
+            t.diagnostic('Server writing (execute-complete for ping)')
             const $ = data.match(/Event-UUID: (\S+)/i)
             if ($?.[1] != null) {
               const eventUUID = $[1]
@@ -65,16 +66,17 @@ Application-UUID: ${eventUUID}
             }
           }
         } catch (ex) {
-          t.log(ex)
-          t.fail()
+          t.diagnostic(inspect(ex))
+          // FIXME, probably
+          throw ex
         }
       })()
     })
     c.on('end', function () {
-      t.log('Server end')
+      t.diagnostic('Server end')
     })
     c.resume()
-    t.log('Server writing (auth)')
+    t.diagnostic('Server writing (auth)')
     c.write(`
 Content-Type: auth/request
 
@@ -82,27 +84,27 @@ Content-Type: auth/request
   }
   const spoof = createServer(service)
   spoof.listen(clientPort, function () {
-    t.log('Server ready')
+    t.diagnostic('Server ready')
   })
   spoof.on('close', function () {
-    t.log('Server received close event')
+    t.diagnostic('Server received close event')
   })
   const w = new FreeSwitchClient({
     host: '127.0.0.1',
     port: clientPort,
-    logger: clientLogger(t),
+    logger: clientLogger(),
   })
-  t.log('Awaiting connect')
+  t.diagnostic('Awaiting connect')
   w.connect()
-  t.log('Awaiting FreeSwitchResponse object')
+  t.diagnostic('Awaiting FreeSwitchResponse object')
   const call = await onceConnected(w)
-  t.log('Client is connected')
+  t.diagnostic('Client is connected')
   await call.command_uuid('1234', 'bridge', 'foo', 500)
-  t.log('Client sending again')
+  t.diagnostic('Client sending again')
   await call.command_uuid('1234', 'ping', 'bar', 500)
-  t.log('Client requesting end')
+  t.diagnostic('Client requesting end')
   call.end('Test completed')
   w.end()
   spoof.close()
-  t.pass()
+})
 })

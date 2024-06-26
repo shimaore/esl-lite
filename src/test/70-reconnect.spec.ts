@@ -1,42 +1,43 @@
-import test from 'ava'
+import { it } from 'node:test'
 
 import { FreeSwitchClient } from '../esl-lite.js'
 
 import { type Socket, createServer } from 'node:net'
 import { sleep } from './tools.js'
 import { clientLogger } from './utils.js'
+import { inspect } from 'node:util'
 
 const clientPort = 5623
 
-test('should reconnect', async function (t) {
-  t.timeout(30000)
+it('should reconnect', { timeout: 30000 }, (t) => {
+  return new Promise( (resolve,reject) => {
   const start = function (): void {
     let run = 0
     const service = function (c: Socket): void {
       run++
-      t.log(`Server run #${run} received connection`)
+      t.diagnostic(`Server run #${run} received connection`)
       c.on('error', function (error) {
-        t.log(`Server run #${run} received error`, error)
+        t.diagnostic(`Server run #${run} received error ${error}`)
       })
       c.on('data', function (data): void {
         void (async function () {
           try {
-            t.log(`Server run #${run} received data`, data)
+            t.diagnostic(`Server run #${run} received data ${data}`)
             switch (run) {
               case 1:
-                t.log('Server run #1 sleeping')
+                t.diagnostic('Server run #1 sleeping')
                 await sleep(500)
-                t.log('Server run #1 close')
+                t.diagnostic('Server run #1 close')
                 c.destroy()
                 break
               case 2:
-                t.log('Server run #2 writing (auth)')
+                t.diagnostic('Server run #2 writing (auth)')
                 c.write(`Content-Type: auth/request
 
 `)
-                t.log('Server run #2 sleeping')
+                t.diagnostic('Server run #2 sleeping')
                 await sleep(500)
-                t.log('Server run #2 writing (reply)')
+                t.diagnostic('Server run #2 writing (reply)')
                 c.write(`
 Content-Type: command/reply
 Reply-Text: +OK accepted
@@ -44,26 +45,26 @@ Reply-Text: +OK accepted
 Content-Type: text/disconnect-notice
 Content-Length: 0
 `)
-                t.log('Server run #2 sleeping')
+                t.diagnostic('Server run #2 sleeping')
                 await sleep(500)
-                t.log('Server run #2 end')
+                t.diagnostic('Server run #2 end')
                 c.end()
                 break
               case 3:
-                t.log('Server run #3 end')
+                t.diagnostic('Server run #3 end')
                 try {
                   client.end()
                 } catch (error) {
-                  t.log(error)
+                  t.diagnostic(inspect(error))
                 }
                 c.end()
-                t.log('Server run #3 close')
+                t.diagnostic('Server run #3 close')
                 spoof.close()
-                t.pass()
+                resolve()
             }
           } catch (ex) {
-            t.log(ex)
-            t.fail()
+            t.diagnostic(inspect(ex))
+            reject()
           }
         })()
       })
@@ -74,21 +75,21 @@ Content-Length: 0
     }
     const spoof = createServer(service)
     spoof.listen(clientPort, function () {
-      t.log('Server ready')
+      t.diagnostic('Server ready')
     })
     spoof.on('close', function () {
-      t.log('Server received close event')
+      t.diagnostic('Server received close event')
     })
   }
   start()
   const client = new FreeSwitchClient({
     host: '127.0.0.1',
     port: clientPort,
-    logger: clientLogger(t),
+    logger: clientLogger(),
   })
   client.on('error', function (error) {
-    t.log('client error', error)
+    t.diagnostic(`client error ${error}`)
   })
   client.connect()
-  await sleep(20000)
+})
 })
