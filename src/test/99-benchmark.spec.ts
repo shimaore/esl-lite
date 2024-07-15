@@ -1,4 +1,4 @@
-import test from 'ava'
+import test from 'node:test'
 
 import { FreeSwitchClient } from '../esl-lite.js'
 
@@ -13,7 +13,7 @@ const dialplanPort = 7000
 
 const domain = '127.0.0.1:5062'
 
-test.before(start)
+test.before(start, { timeout: 12*second })
 test.after.always(async function (t) {
   t.timeout(50 * second)
   // Ava runs tests in parallel, so let's wait long enough for the other tests to

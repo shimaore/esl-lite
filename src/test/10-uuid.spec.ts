@@ -11,6 +11,7 @@ import {
 } from './utils.js'
 import { second, sleep } from './tools.js'
 import { FreeSwitchClient, type FreeSwitchResponse } from '../esl-lite.js'
+import assert from 'node:assert'
 
 // Using UUID (in client mode)
 // ---------------------------
@@ -26,7 +27,7 @@ test.before(async (t) => {
   server = new legacyESL.FreeSwitchServer({
     all_events: true,
     my_events: false,
-    logger: serverLogger(t),
+    logger: serverLogger(),
   })
 
   const service = function (
@@ -36,22 +37,22 @@ test.before(async (t) => {
     void (async function () {
       try {
         const destination = data['variable_sip_req_user']
-        t.log('Service started', { destination })
+        console.log('Service started', { destination })
         switch (destination) {
           case 'answer-wait-30000':
-            t.log('Service answer')
+            console.log('Service answer')
             await call.command('answer')
-            t.log('Service wait 30s')
+            console.log('Service wait 30s')
             await sleep(30 * second)
             break
           default:
-            t.log(`Invalid destination ${destination}`)
+            console.log(`Invalid destination ${destination}`)
         }
-        t.log('Service hanging up')
+        console.log('Service hanging up')
         await call.hangup()
-        t.log('Service hung up')
+        console.log('Service hung up')
       } catch (ex) {
-        t.log(ex)
+        console.error(ex)
       }
     })()
   }
@@ -67,18 +68,16 @@ test.before(async (t) => {
   })
 })
 
-test.after.always(async (t) => {
-  t.timeout(10 * second)
+test.after(async () => {
   await sleep(7 * second)
   const count = await server?.getConnectionCount()
   await server?.close()
-  t.is(count, 0, `Oops, ${count} active connections leftover`)
-  t.log('Service closed')
-})
+  assert.strictEqual(count, 0, `Oops, ${count} active connections leftover`)
+  console.log('Service closed')
+}, { timeout: 10 * second })
 
-test('should handle UUID-based commands', async function (t) {
-  t.timeout(20000)
-  const logger = clientLogger(t)
+test('should handle UUID-based commands', async () => {
+  const logger = clientLogger()
   const client = new FreeSwitchClient({
     port: serverPort,
     logger,
@@ -91,11 +90,12 @@ test('should handle UUID-based commands', async function (t) {
     `originate {origination_uuid=${originationUUID},origination_channel_name='1234'}sofia/test-server/sip:answer-wait-30000@${domain} &park`,
     20000
   )
+  let outcome = undefined
   if (res1 instanceof Error) {
-    t.fail(res1.message)
+    outcome = res1
   } else {
-    t.log(res1.body.response)
-    t.is(res1.body.response, `+OK ${originationUUID}\n`)
+    console.log(res1.body.response)
+    assert.strictEqual(res1.body.response, `+OK ${originationUUID}\n`)
   }
   await sleep(1000)
   const res2 = await call.command_uuid(
@@ -105,59 +105,70 @@ test('should handle UUID-based commands', async function (t) {
     1000
   )
   if (res2 instanceof Error) {
-    t.fail(res2.message)
+    outcome = res2
   } else {
-    t.is(res2.body.data['Hangup-Cause'], 'NORMAL_CLEARING')
+    assert.strictEqual(res2.body.data['Hangup-Cause'], 'NORMAL_CLEARING')
   }
   client.end()
-})
+  if (outcome instanceof Error) {
+    throw outcome
+  }
+}, { timeout: 20*second })
 
-test('should map sequential responses', async function (t) {
+test('should map sequential responses', async function () {
   const client = new FreeSwitchClient({
     port: serverPort,
-    logger: clientLogger(t),
+    logger: clientLogger(),
   })
   client.connect()
   const call = await onceConnected(client)
   const res1 = await call.bgapi('create_uuid', 100)
+  let outcome = undefined
   if (res1 instanceof Error) {
-    t.fail(res1.message)
+    outcome = res1
   } else {
     const uuid1 = res1.body.response
     const res2 = await call.bgapi('create_uuid', 100)
     if (res2 instanceof Error) {
-      t.fail(res2.message)
+      outcome = res2
     } else {
       const uuid2 = res2.body.response
-      t.is(typeof uuid1, 'string')
-      t.is(typeof uuid2, 'string')
-      t.not(uuid1, uuid2, 'UUIDs should be unique')
+      assert.strictEqual(typeof uuid1, 'string')
+      assert.strictEqual(typeof uuid2, 'string')
+      assert.notStrictEqual(uuid1, uuid2, 'UUIDs should be unique')
     }
   }
   client.end()
+  if (outcome instanceof Error) {
+    throw outcome
+  }
 })
 
-test('should map sequential responses (using bgapi)', async function (t) {
+test('should map sequential responses (using bgapi)', async function () {
   const client = new FreeSwitchClient({
     port: serverPort,
-    logger: clientLogger(t),
+    logger: clientLogger(),
   })
   client.connect()
   const call = await onceConnected(client)
   const res1 = await call.bgapi('create_uuid', 100)
+  let outcome = undefined
   if (res1 instanceof Error) {
-    t.fail(res1.message)
+    outcome = res1
   } else {
     const uuid1 = res1.body.response
     const res2 = await call.bgapi('create_uuid', 100)
     if (res2 instanceof Error) {
-      t.fail(res2.message)
+      outcome = res2
     } else {
       const uuid2 = res2.body.response
-      t.not(uuid1, uuid2, 'UUIDs should be unique')
+      assert.notStrictEqual(uuid1, uuid2, 'UUIDs should be unique')
     }
   }
   client.end()
+  if (outcome instanceof Error) {
+    throw outcome
+  }
 })
 
 test('should map sequential responses (sent in parallel)', async function (t) {

@@ -19,5 +19,5 @@ test('01-args: should report properly on closed (bgapi)', async function (t) {
   const T = new FreeSwitchResponse(socket, logger(t))
   T.closed = true
   const res = await T.bgapi('foo', 1000)
-  t.(res instanceof FreeSwitchClosedError, 'Expect FreeSwitchClosedError')
+  assert(res instanceof FreeSwitchClosedError, 'Expect FreeSwitchClosedError')
 })

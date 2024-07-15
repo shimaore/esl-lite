@@ -1,4 +1,4 @@
-import test from 'ava'
+import test from 'node:test'
 
 import {
   start,
@@ -96,7 +96,7 @@ test.before('14-base-server: start service', async function (t) {
   t.pass()
 })
 
-test.after.always('14-base-server: stop service', async function (t) {
+test.after('14-base-server: stop service', async function (t) {
   t.timeout(10 * second)
   await sleep(8 * second)
   const count = await server?.getConnectionCount()
@@ -109,7 +109,7 @@ test.after.always('14-base-server: stop service', async function (t) {
   t.pass()
 })
 
-test.before(start)
+test.before(start, { timeout: 12*second })
 test.after.always(stop)
 
 test('14-base-server: should handle one call', async function (t) {

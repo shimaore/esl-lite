@@ -1,4 +1,4 @@
-import test from 'ava'
+import test from 'node:test'
 
 import { FreeSwitchClient, once, FreeSwitchEventEmitter } from '../esl-lite.js'
 
@@ -203,8 +203,8 @@ test.after.always(async function (t) {
   t.pass()
 })
 
-test.before(start)
-test.after.always(stop)
+test.before(start, { timeout: 12*second })
+test.after(stop, { timeout: 12*second })
 
 test('should handle many calls', async function (t): Promise<void> {
   const count = 20

@@ -57,7 +57,7 @@
     "tag": "latest"
   },
   "usage": "Test with podman  build --ulimit nofile=1048576:1048576 -f test/Dockerfile .",
-  "packageManager": "yarn@4.1.1+sha256.f3cc0eda8e5560e529c7147565b30faa43b4e472d90e8634d7134a37c7f59781",
+  "packageManager": "yarn@4.3.1",
   "dependencies": {
     "ulidx": "2.3.0"
   },

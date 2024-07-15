@@ -1,4 +1,4 @@
-import test from 'ava'
+import test from 'node:test'
 
 import {
   start,
@@ -28,8 +28,8 @@ const cps = 2
 
 const clientPort = 8024
 
-test.before(start)
-test.after.always(stop)
+test.before(start, { timeout: 12*second })
+test.after(stop, { timeout: 12*second })
 
 test.before('15-base-client: start service', async function (t) {
   const service = async function (

@@ -1,8 +1,8 @@
-import test from 'ava'
-
+import { test, it } from 'node:test'
 import { start, stop } from './utils.js'
+import { second } from './tools.js'
 
-test.before(start)
-test.after.always(stop)
+test.before(start, { timeout: 12*second })
+test.after(stop, { timeout: 12*second })
 
-test('01-ok', (t) => t.pass())
+it('01-ok', async () => {})
