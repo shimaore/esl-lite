@@ -186,15 +186,8 @@ export class FreeSwitchClient extends FreeSwitchEventEmitter<
           reconnectMaybe()
           return
         }
-        const r3 = await this.current_call?.event_json([
-          'CHANNEL_EXECUTE_COMPLETE',
-          'BACKGROUND_JOB',
-        ])
-        if (r3 instanceof Error) {
-          reconnectMaybe()
-          return
-        }
         if (this.running && this.current_call != null) {
+          this.current_call.init()
           this.emit('connect', this.current_call)
         }
       })().catch((err: unknown) => {

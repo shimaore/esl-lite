@@ -93,9 +93,8 @@ export const startServer = async (
 }
 
 export const stop = async (t: ExecutionContext): Promise<void> => {
-  t.timeout(8 * second)
+  t.timeout(12 * second)
   await simpleStop(t.log)
-  t.pass()
 }
 
 export const onceConnected = async (

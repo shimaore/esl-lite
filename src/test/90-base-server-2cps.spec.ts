@@ -304,7 +304,6 @@ test('should handle chained commands', async function (t) {
   client.connect()
   const [service] = await p
   const q = once(ev, 'server7022')
-  await service.event_json(['ALL'])
   const res = await service.bgapi(
     `originate sofia/test-client/sip:server7022@${domain} &park`,
     8000

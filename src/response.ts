@@ -281,7 +281,6 @@ export interface FreeSwitchPrivateEvents {
  * ```
  */
 export interface FreeSwitchPublicResponseEvents {
-  CUSTOM: (data: FreeSwitchEventData) => void
   CLONE: (data: FreeSwitchEventData) => void
   CHANNEL_CREATE: (data: FreeSwitchEventData) => void
   CHANNEL_DESTROY: (data: FreeSwitchEventData) => void
@@ -484,9 +483,28 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
     unflushedWrites: 0n,
   }
 
+  /** Event emitter for custom events
+   *
+   * ```
+   * this.custom.on('conference::maintenance', (data) => {
+   * })
+   * ```
+   */
+  public readonly custom: FreeSwitchEventEmitter<
+    string,
+    Record<string, (data: FreeSwitchEventData) => void>
+  >
+
   /** The `FreeSwitchResponse` is bound to a single socket (dual-stream). */
   constructor(socket: Socket, logger: FreeSwitchResponseLogger) {
-    super()
+    super(
+      (event: EventName) => { this.event_json(event) }
+      // (event:EventName) => { this.nixevent(event) },
+    )
+    this.custom = new FreeSwitchEventEmitter(
+      (subclass: string) => { this.event_json_custom(subclass) }
+    )
+
     socket.setKeepAlive(true)
     socket.setNoDelay(true)
 
@@ -503,35 +521,6 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
     // We also must track connection close in order to prevent writing to a closed socket.
     this.closed = false
 
-    this.on('CHANNEL_EXECUTE_COMPLETE', (res: FreeSwitchEventData) => {
-      const eventUUID = res.body.applicationUUID
-      if (eventUUID != null) {
-        const resolver = this.executeCompleteMap.get(eventUUID)
-        if (resolver != null) {
-          this.executeCompleteMap.delete(eventUUID)
-          this.logger.debug('FreeSwitchResponse: CHANNEL_EXECUTE_COMPLETE', {
-            eventUUID,
-            ref: this.__ref,
-          })
-          resolver(res)
-        }
-      }
-    })
-
-    this.on('BACKGROUND_JOB', (res: FreeSwitchEventData) => {
-      const jobUUID = res.body.jobUUID
-      if (jobUUID != null) {
-        const resolver = this.backgroundJobMap.get(jobUUID)
-        if (resolver != null) {
-          this.backgroundJobMap.delete(jobUUID)
-          this.logger.debug('FreeSwitchResponse: BACKGROUND_JOB', {
-            jobUUID,
-            ref: this.__ref,
-          })
-          resolver(res)
-        }
-      }
-    })
     this.privateEventEmitter.once('freeswitch_disconnect_notice', () => {
       this.end('Received disconnect notice')
     })
@@ -596,6 +585,38 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
       this.socketEventEmitter.emit('error', err)
     }
     this.__socket.on('error', socketOnError)
+  }
+
+  init(): void {
+    this.on('CHANNEL_EXECUTE_COMPLETE', (res: FreeSwitchEventData) => {
+      const eventUUID = res.body.applicationUUID
+      if (eventUUID != null) {
+        const resolver = this.executeCompleteMap.get(eventUUID)
+        if (resolver != null) {
+          this.executeCompleteMap.delete(eventUUID)
+          this.logger.debug('FreeSwitchResponse: CHANNEL_EXECUTE_COMPLETE', {
+            eventUUID,
+            ref: this.__ref,
+          })
+          resolver(res)
+        }
+      }
+    })
+
+    this.on('BACKGROUND_JOB', (res: FreeSwitchEventData) => {
+      const jobUUID = res.body.jobUUID
+      if (jobUUID != null) {
+        const resolver = this.backgroundJobMap.get(jobUUID)
+        if (resolver != null) {
+          this.backgroundJobMap.delete(jobUUID)
+          this.logger.debug('FreeSwitchResponse: BACKGROUND_JOB', {
+            jobUUID,
+            ref: this.__ref,
+          })
+          resolver(res)
+        }
+      }
+    })
   }
 
   /**
@@ -1134,20 +1155,33 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   /**
    * Request that the server adds the events to its filter, and provide them in JSON format.
    * ```ts
-   * await service.event_json(['HEARTBEAT'])
+   * await service.event_json('HEARTBEAT')
    * ```
-   * This method is required for events to start, in other words calling
-   * `service.on(event,…)`, `service.once(event,…)` etc will not work unless
-   * reception of the `event` was requested using `event_json`.
    *
    * This method is not expected to throw / return a rejected Promise.
    */
-  async event_json(events: EventName[]): SendResult {
-    return await this.send(
-      `event json ${events.join(' ')}`,
+  private event_json(event: EventName): void {
+    this.send(
+      `event json ${event}`,
       {},
       this.localTimeout
-    )
+    ).catch( (err:unknown) => { this.logger.error('event_json', { ref: this.ref(), err }) } )
+  }
+
+  /**
+   * Request that the server adds the CUSTOM event to its filter, and provide them in JSON format.
+   * ```ts
+   * await service.event_json_custom('conference::maintenance')
+   * ```
+   *
+   * This method is not expected to throw / return a rejected Promise.
+   */
+  private event_json_custom(subclass: string): void {
+    this.send(
+      `event json CUSTOM ${subclass}`,
+      {},
+      this.localTimeout
+    ).catch( (err:unknown) => { this.logger.error('event_json_custom', { ref: this.ref(), err }) } )
   }
 
   /**
@@ -1155,9 +1189,9 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
    *
    * This method is not expected to throw / return a rejected Promise.
    */
-  async nixevent(events: EventName[]): SendResult {
+  async nixevent(event: EventName): SendResult {
     return await this.send(
-      `nixevent ${events.join(' ')}`,
+      `nixevent ${event}`,
       {},
       this.localTimeout
     )
@@ -1210,6 +1244,14 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
    */
   async sendevent(eventName: EventName, args: ValueMap): SendResult {
     return await this.send(`sendevent ${eventName}`, args, this.localTimeout)
+  }
+
+  async sendeventCUSTOM(subclass: string, args: ValueMap): SendResult {
+    return await this.send(
+      `sendevent CUSTOM`,
+      { 'Event-Subclass': subclass, ...args },
+      this.localTimeout
+    )
   }
 
   /**

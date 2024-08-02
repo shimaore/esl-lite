@@ -16,7 +16,10 @@ export class FreeSwitchEventEmitter<
    * const ev = new FreeSwitchEventEmitter<'ping',{ ping: () => console.log('ping\) }>()
    * ```
    */
-  constructor() {
+  constructor(
+    private readonly registerEvent?: (event: keyof T) => void,
+    private readonly unregisterEvent?: (event: keyof T) => void
+  ) {
     this.__on = {}
     this.__once = {}
   }
@@ -43,6 +46,10 @@ export class FreeSwitchEventEmitter<
    * The callback is called every time the event is emitted.
    */
   on<K extends keyof T>(event: K, handler: T[K]): this {
+    if (this.registerEvent != null && this.isEmpty(event)) {
+      this.registerEvent(event)
+    }
+
     if (this.__on[event] == null) {
       this.__on[event] = new Set()
     }
@@ -55,6 +62,10 @@ export class FreeSwitchEventEmitter<
    * The callback is only called the first time the event is emitted.
    */
   once<K extends keyof T>(event: K, handler: T[K]): this {
+    if (this.registerEvent != null && this.isEmpty(event)) {
+      this.registerEvent(event)
+    }
+
     if (this.__once[event] == null) {
       this.__once[event] = new Set()
     }
@@ -80,14 +91,32 @@ export class FreeSwitchEventEmitter<
   removeListener<K extends keyof T>(event: K, handler: T[K]): void {
     this.__on[event]?.delete(handler)
     this.__once[event]?.delete(handler)
+
+    if (this.unregisterEvent != null && this.isEmpty(event)) {
+      this.unregisterEvent(event)
+    }
   }
 
   /**
    * Unregisters all callbacks from the named event.
    */
   removeAllListeners(): void {
+    if (this.unregisterEvent != null) {
+      for (const event in this.__on) {
+        this.unregisterEvent(event)
+      }
+      for (const event in this.__once) {
+        this.unregisterEvent(event)
+      }
+    }
     this.__on = {}
     this.__once = {}
+  }
+
+  private isEmpty(event: keyof T): boolean {
+    const onSize = this.__on[event]?.size ?? 0
+    const onceSize = this.__once[event]?.size ?? 0
+    return onSize === 0 && onceSize === 0
   }
 }
 

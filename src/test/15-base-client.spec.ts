@@ -163,7 +163,6 @@ test('15-base-client: should detect hangup', async function (t) {
       t.true(d < 16 * second)
     }
   })
-  await service.event_json(['CHANNEL_HANGUP'])
   await service.bgapi(
     `originate [${optionsText(options)}]sofia/test-client/sip:answer-wait-15000@${domain} &park`,
     16_000

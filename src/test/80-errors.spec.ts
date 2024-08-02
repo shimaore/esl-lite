@@ -385,7 +385,6 @@ const shouldDetect = function (code: string, pattern: RegExp) {
         variable_billmsec: '0',
       })
     })
-    await service.event_json(['ALL'])
     t.log(`sending call for ${code}`)
     const res = await service.bgapi(
       `originate {${optionsText(options)}}sofia/test-client/sip:wait-100-respond-${code}@${domain} &park`,

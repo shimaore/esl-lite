@@ -85,7 +85,6 @@ test('should handle UUID-based commands', async function (t) {
   })
   client.connect()
   const call = await onceConnected(client)
-  await call.event_json(['ALL'])
   const originationUUID = '1829'
   const res1 = await call.bgapi(
     `originate {origination_uuid=${originationUUID},origination_channel_name='1234'}sofia/test-server/sip:answer-wait-30000@${domain} &park`,
@@ -236,7 +235,6 @@ test('should handle errors', async function (t) {
   })
   client.connect()
   const call = await onceConnected(client)
-  await call.event_json(['ALL'])
   const originationUUID = 'ABCD'
   await call.bgapi(
     `originate {origination_uuid=${originationUUID}}sofia/test-server/sip:answer-wait-30000@${domain} &park`,
@@ -310,7 +308,6 @@ test.skip('should detect DTMF', async function (t) {
           coreUUID = msg.body.uniqueID
           t.log('CHANNEL_OUTGOING', { coreUUID })
         })
-        await call.event_json(['ALL'])
         await call.bgapi('sofia status', 200)
         await call.bgapi('sofia global siptrace on', 200)
         const msg = await call.bgapi(

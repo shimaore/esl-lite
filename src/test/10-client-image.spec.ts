@@ -1,10 +1,6 @@
 import test from 'ava'
 
-import {
-  FreeSwitchClient,
-  type FreeSwitchEventData,
-  once,
-} from '../esl-lite.js'
+import { FreeSwitchClient, once } from '../esl-lite.js'
 
 import { clientLogger, start, stop, onceConnected } from './utils.js'
 import { sleep } from './tools.js'
@@ -86,7 +82,7 @@ test('10-client-image: should reloadxml', async function (t) {
   await sleep(500)
 })
 
-test.serial(
+test(
   '10-client-image: should properly parse plain events',
   async function (t) {
     const client = new FreeSwitchClient({
@@ -104,14 +100,14 @@ test.serial(
               res.headers.replyText ?? '',
               /\+OK event listener enabled plain/
             )
-            const msgP = once(call, 'CUSTOM')
-            await call.sendevent('CUSTOM', {
-              'Event-Name': 'CUSTOM',
+            const msgP = once(call.custom, 'my::precious')
+            await call.sendeventCUSTOM('my::precious', {
               'Event-XBar': 'some',
             })
             const [msg] = await msgP
             t.like(msg.body.data, {
               'Event-Name': 'CUSTOM',
+              'Event-Subclass': 'my::precious',
               'Event-XBar': 'some',
             })
           }
@@ -128,7 +124,7 @@ test.serial(
   }
 )
 
-test.serial(
+test(
   '10-client-image: should properly parse JSON events',
   async function (t) {
     const client = new FreeSwitchClient({
@@ -146,14 +142,14 @@ test.serial(
               res.headers.replyText ?? '',
               /\+OK event listener enabled json/
             )
-            const msgP = once(call, 'CUSTOM') as Promise<[FreeSwitchEventData]>
-            await call.sendevent('CUSTOM', {
-              'Event-Name': 'CUSTOM',
+            const msgP = once(call.custom, 'your::precious')
+            await call.sendeventCUSTOM('your::precious', {
               'Event-XBar': 'ë°ñ',
             })
             const [msg] = await msgP
             t.like(msg.body.data, {
               'Event-Name': 'CUSTOM',
+              'Event-Subclass': 'your::precious',
               'Event-XBar': 'ë°ñ',
             })
           }
@@ -169,39 +165,3 @@ test.serial(
     await sleep(500)
   }
 )
-
-test.skip('10-client-image: should detect failed socket', async function (t) {
-  t.timeout(1000)
-  const client = new FreeSwitchClient({
-    port: clientPort,
-    logger: clientLogger(t),
-  })
-  client.on('connect', function (call): void {
-    void (async function () {
-      try {
-        const res = await call.bgapi(
-          'originate sofia/test-client/sip:server-failed@127.0.0.1:34564 &park',
-          1000
-        )
-        // FIXME currently return CHAN_NOT_IMPLEMENTED
-        if (res instanceof Error) {
-          t.fail(res.message)
-        } else {
-          const { response } = res.body
-          if (typeof response === 'string') {
-            t.regex(response, /^-ERR NORMAL_TEMPORARY_FAILURE/)
-          } else {
-            t.fail('response is not a string')
-            t.log(response)
-          }
-        }
-        client.end()
-        t.pass()
-      } catch (error) {
-        t.fail()
-      }
-    })()
-  })
-  client.connect()
-  await sleep(500)
-})
