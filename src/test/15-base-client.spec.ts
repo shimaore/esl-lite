@@ -34,11 +34,11 @@ describe('15-base-client.spec', () => {
 before(start, { timeout: 12*second })
 after(stop, { timeout: 12*second })
 
-before(async function () {
-  const service = async function (
+before(async () => {
+  const service = async (
     call: legacyESL.FreeSwitchResponse,
     { data }: { data: legacyESL.StringMap }
-  ): Promise<void> {
+  ): Promise<void> => {
     const destination = data['variable_sip_req_user']
     console.info('received call', destination)
     switch (destination) {
@@ -59,8 +59,7 @@ before(async function () {
         await call.command('hangup', '200 answer-wait-3000').catch(() => true)
         break
       default:
-        console.info(`Invalid destination ${destination}`)
-        throw new Error(`Invalid destination ${destination}`)
+        console.error(`Invalid destination ${destination}`)
     }
   }
   server = new legacyESL.FreeSwitchServer({
@@ -73,22 +72,22 @@ before(async function () {
       try {
         await service(call, args)
       } catch (err) {
-        console.info('Server-side error', err)
+        console.error('Server-side error', err)
       }
     })().catch( console.error )
   })
   await server.listen({
     port: 7000,
   })
-})
+}, { timeout: 12*second })
 
-after(async function () {
+after(async () => {
   await sleep(8 * second)
   const count = await server.getConnectionCount()
+  await server?.close()
   if (count > 0) {
     throw new Error(`Oops, ${count} active connections leftover`)
   }
-  await server?.close()
 }, { timeout: 10 * second })
 
 void it('15-base-client: should detect leg_progress_timeout', { timeout: 4 * second }, async function () {
@@ -96,9 +95,9 @@ void it('15-base-client: should detect leg_progress_timeout', { timeout: 4 * sec
     port: clientPort,
     logger: logger(),
   })
-  const p = onceConnected(client)
+  const p = client.onceAsync('connect')
   client.connect()
-  const service = await p
+  const [service] = await p
   const id = uuidv4()
   const options = {
     leg_progress_timeout: 1,
@@ -121,9 +120,9 @@ void it('15-base-client: should detect leg_timeout', { timeout: 4 * second }, as
     port: clientPort,
     logger: logger(),
   })
-  const p = onceConnected(client)
+  const p = client.onceAsync('connect')
   client.connect()
-  const service = await p
+  const [service] = await p
   const id = uuidv4()
   const options = {
     leg_timeout: 2,
@@ -141,7 +140,7 @@ void it('15-base-client: should detect leg_timeout', { timeout: 4 * second }, as
   }
 })
 
-void it('15-base-client: should detect hangup', { timeout: 18 * second }, async function () {
+void it('15-base-client: should detect hangup', { timeout: 18 * second }, async (t) => {
   const client = new FreeSwitchClient({
     port: clientPort,
     logger: logger(),
@@ -154,11 +153,14 @@ void it('15-base-client: should detect hangup', { timeout: 18 * second }, async 
     tracer_uuid: id,
   }
   const duration = timer()
+  let success = 0
   service.on('CHANNEL_HANGUP', function (msg) {
+    t.diagnostic(`msg = ${inspect(msg)}`)
     if (msg.body.data['variable_tracer_uuid'] === id) {
       const d = duration()
       assert(d > 14 * second)
       assert(d < 16 * second)
+      success++
     }
   })
   await service.bgapi(
@@ -167,6 +169,9 @@ void it('15-base-client: should detect hangup', { timeout: 18 * second }, async 
   )
   await sleep(16 * second)
   client.end()
+  if (success !== 1) {
+    throw new Error(`Failed, success=${success}`)
+  }
 })
 
 // This is a simple test to make sure the client can work with both legs.

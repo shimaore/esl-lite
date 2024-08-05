@@ -3,6 +3,7 @@
  * Reference: https://github.com/signalwire/freeswitch/blob/master/src/switch_event.c#L137
  */
 export type EventName =
+  | 'CUSTOM'
   | 'CLONE'
   | 'CHANNEL_CREATE'
   | 'CHANNEL_DESTROY'
@@ -101,6 +102,7 @@ export type EventName =
  * Reference: https://github.com/signalwire/freeswitch/blob/master/src/switch_event.c#L137
  */
 export const EventNames = new Set<EventName>([
+  'CUSTOM',
   'CLONE',
   'CHANNEL_CREATE',
   'CHANNEL_DESTROY',

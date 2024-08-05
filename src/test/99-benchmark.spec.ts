@@ -55,7 +55,7 @@ void it('should be reachable', { timeout: 35 * second }, async function (t) {
       }))
     })()
   }
-  const timer = setInterval(report, 1000)
+  const timer = false ? setInterval(report, 1000) : undefined
   let receivedCalls = 0n
   let receivedCompletedCalls = 0n
   const serverHandler = function (call: legacyESL.FreeSwitchResponse): void {

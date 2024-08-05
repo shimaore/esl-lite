@@ -281,6 +281,8 @@ export interface FreeSwitchPrivateEvents {
  * ```
  */
 export interface FreeSwitchPublicResponseEvents {
+  /** Receive CUSTOM events without subclasses (not useful for FreeSwitch events) */
+  CUSTOM: (data: FreeSwitchEventData) => void
   CLONE: (data: FreeSwitchEventData) => void
   CHANNEL_CREATE: (data: FreeSwitchEventData) => void
   CHANNEL_DESTROY: (data: FreeSwitchEventData) => void
@@ -617,6 +619,13 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
         }
       }
     })
+
+    this.on('CUSTOM', (res) => {
+      const subclass = res.body.data['Event-Subclass']
+      if (typeof subclass === 'string') {
+        this.custom.emit(subclass, res)
+      }
+    })
   }
 
   /**
@@ -865,7 +874,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
    *
    * This method is not expected to throw / return a rejected Promise.
    */
-  async send(command: string, args: ValueMap, timeout: number): SendResult {
+  async send(command: string, commandHeaders: ValueMap, timeout: number): SendResult {
     if (this.closed) {
       return new FreeSwitchClosedError('before sending')
     }
@@ -884,7 +893,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
         timeout,
         signal
       )
-      const q = await this.write(command, args)
+      const q = await this.write(command, commandHeaders)
       if (q instanceof Error) {
         signal.emit('abort', undefined)
         return q
@@ -898,7 +907,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
       this.logger.debug('FreeSwitchResponse: send: received reply', {
         ref: this.__ref,
         command,
-        args,
+        commandHeaders,
         headers,
         body,
       })
@@ -933,7 +942,8 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
       this.logger.debug('FreeSwitchResponse: send: success', {
         ref: this.__ref,
         command,
-        args,
+        commandHeaders,
+        headers,
         bodyData,
       })
 
@@ -1178,7 +1188,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
    */
   private event_json_custom(subclass: string): void {
     this.send(
-      `event json CUSTOM ${subclass}`,
+      `event json CUSTOM ${subclass} `,
       {},
       this.localTimeout
     ).catch( (err:unknown) => { this.logger.error('event_json_custom', { ref: this.ref(), err }) } )
@@ -1243,13 +1253,17 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
    * This method is not expected to throw / return a rejected Promise.
    */
   async sendevent(eventName: EventName, args: ValueMap): SendResult {
-    return await this.send(`sendevent ${eventName}`, args, this.localTimeout)
+    return await this.send(
+      `sendevent ${eventName}`,
+      { 'Event-Name': eventName, ...args },
+      this.localTimeout
+    )
   }
 
   async sendeventCUSTOM(subclass: string, args: ValueMap): SendResult {
     return await this.send(
       `sendevent CUSTOM`,
-      { 'Event-Subclass': subclass, ...args },
+      { 'Event-Name': 'CUSTOM', 'Event-Subclass': subclass, ...args },
       this.localTimeout
     )
   }

@@ -25,11 +25,10 @@ export const start = async (
   await Promise.all([startClient('ignore'), startServer('ignore')])
 }
 
-export const clientLogger = function (
+export const clientLogger = function ( withDebug: boolean = false
 ): FreeSwitchClientLogger {
   return {
-    // debug: (msg, obj) => { t.log('clientLogger:debug', msg, obj) },
-    debug: () => {},
+    debug: withDebug ? (msg, obj) => { console.debug('clientLogger:debug', msg, obj) } : () => {},
     info: (msg, obj) => {
       console.info('clientLogger:info', msg, obj)
     },
@@ -87,9 +86,7 @@ export const stop = async (): Promise<void> => {
 export const onceConnected = async (
   client: FreeSwitchClient
 ): Promise<FreeSwitchResponse> => {
-  return await new Promise((resolve) => {
-    client.once('connect', resolve)
-  })
+  return client.onceAsync('connect').then( ([call]) => call )
 }
 export const onceWarning = async (
   client: FreeSwitchClient

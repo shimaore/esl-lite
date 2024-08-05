@@ -21,8 +21,8 @@ const clientPort = 8024
 const domain = '127.0.0.1:5062'
 
 describe('80-error.spec', () => {
-before(start)
-after(stop)
+before(start, { timeout: 12*second })
+after(stop, { timeout: 12*second })
 
 // `leg_progress_timeout` counts from the time the INVITE is placed until a progress indication (e.g. 180, 183) is received. Controls Post-Dial-Delay on assert.strictEqual leg.
 

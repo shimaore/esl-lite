@@ -14,15 +14,15 @@ import {
 
 import * as legacyESL from 'esl'
 import { FreeSwitchClient, FreeSwitchFailedCommandError } from '../esl-lite.js'
-import { sleep } from './tools.js'
+import { second, sleep } from './tools.js'
 import { ulid } from 'ulidx'
 
 const clientPort = 8024
 const domain = '127.0.0.1:5062'
 
 describe('03.spec', () => {
-before(start)
-after(stop)
+before(start, { timeout: 12*second })
+after(stop, { timeout: 12*second })
 
 it('03-ok', async (t) => {
   const server = new legacyESL.FreeSwitchServer({
