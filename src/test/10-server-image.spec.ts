@@ -13,7 +13,7 @@ before(async () => {
 }, { timeout: 12*second })
 after(stop, { timeout: 12*second })
 
-it('10-server-image: should be reachable', async () => {
+it('10-server-image: should be reachable', { timeout: 4*second }, async () => {
   const client = new FreeSwitchClient({
     port: serverPort,
     logger: clientLogger(),
@@ -24,7 +24,7 @@ it('10-server-image: should be reachable', async () => {
   client.end()
 })
 
-it('10-server-image: should reloadxml', async function (t) {
+it('10-server-image: should reloadxml', { timeout: 6*second }, async function (t) {
   const cmd = 'reloadxml'
   const client = new FreeSwitchClient({
     port: serverPort,

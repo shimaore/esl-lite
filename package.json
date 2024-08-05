@@ -48,7 +48,7 @@
     "build": "node build.mjs",
     "prepublishOnly": "yarn install && yarn build && yarn syntax",
     "lint": "yarn prepublishOnly && eslint --fix src/**/*.ts && prettier -w . && typedoc 'src/*.ts'",
-    "test": "yarn prepublishOnly && node --test --abort-on-uncaught-exception --report-uncaught-exception --test-timeout=90000 --test-force-exit --test-reporter spec  --test-concurrency 1",
+    "test": "yarn prepublishOnly && node --test --abort-on-uncaught-exception --report-uncaught-exception --test-timeout=120000 --test-force-exit --test-reporter spec --test-concurrency 1",
     "test:optimize": "node --trace-deopt build/trace/benchmark.js | grep bailout",
     "syntax": "tsc",
     "test:live": "podman  build --ulimit nofile=1048576:1048576 -f test/Dockerfile ."
