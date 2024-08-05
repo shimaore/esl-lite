@@ -1263,19 +1263,6 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   }
 
   /**
-   * Send a CUSTOM event into the FreeSwitch event queue.
-   *
-   * This method is not expected to throw / return a rejected Promise.
-   */
-  async sendeventCUSTOM(subclass: string, args: ValueMap): SendResult {
-    return await this.send(
-      `sendevent CUSTOM`,
-      { 'Event-Name': 'CUSTOM', 'Event-Subclass': subclass, ...args },
-      this.localTimeout
-    )
-  }
-
-  /**
    * Used internally.
    * Calling this method is normally not needed since the module authenticates automatically when requested.
    *

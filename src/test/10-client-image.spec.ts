@@ -195,7 +195,8 @@ describe('10-client-image.spec', () => {
       t.diagnostic('waiting for connection')
       const [call] = await q
       const msgP = call.custom.onceAsync('json::precious2')
-      await call.sendeventCUSTOM('json::precious2', {
+      await call.sendevent('CUSTOM', {
+        'Event-Subclass': 'json::precious2',
         'Event-YBar': 'ë°ñ2',
       })
       t.diagnostic('waiting for CUSTOM event')
@@ -232,7 +233,8 @@ describe('10-client-image.spec', () => {
       t.diagnostic('waiting for connection')
       const [call] = await q
       const msgP = call.custom.onceAsync('conference::maintenance')
-      await call.sendeventCUSTOM('conference::maintenance', {
+      await call.sendevent('CUSTOM', {
+        'Event-Subclass': 'conference::maintenance',
         'Event-ZBar': 'ë°ñ3',
       })
       t.diagnostic('waiting for CUSTOM event')
