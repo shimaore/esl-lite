@@ -18,7 +18,7 @@ export const start = async (): Promise<void> => {
 }
 
 export const clientLogger = function (
-  withDebug: boolean = false
+  withDebug = false
 ): FreeSwitchClientLogger {
   return {
     debug: withDebug
