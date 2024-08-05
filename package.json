@@ -29,27 +29,26 @@
     "types": "./types/src/esl-lite.d.ts"
   },
   "devDependencies": {
-    "@eslint/js": "9.3.0",
+    "@eslint/js": "9.8.0",
     "@tsconfig/node21": "21.0.3",
     "@tsconfig/strictest": "2.0.5",
     "@types/eslint__js": "^8.42.3",
-    "@types/node": "20.12.12",
-    "@types/uuid": "9.0.8",
-    "esbuild": "0.21.3",
-    "esl": "11.1.1",
-    "eslint": "9.3.0",
-    "prettier": "3.2.5",
-    "typedoc": "0.25.13",
-    "typescript": "5.4.5",
-    "typescript-eslint": "7.10.0",
-    "uuid": "9.0.1"
+    "@types/node": "22.1.0",
+    "@types/uuid": "10.0.0",
+    "esbuild": "0.23.0",
+    "esl": "11.2.1",
+    "eslint": "9.8.0",
+    "prettier": "3.3.3",
+    "typedoc": "0.26.5",
+    "typescript": "5.5.4",
+    "typescript-eslint": "7.18.0",
+    "uuid": "10.0.0"
   },
   "scripts": {
     "build": "node build.mjs",
     "prepublishOnly": "yarn install && yarn build && yarn syntax",
     "lint": "yarn prepublishOnly && eslint --fix src/**/*.ts && prettier -w . && typedoc 'src/*.ts'",
     "test": "yarn prepublishOnly && node --test --abort-on-uncaught-exception --report-uncaught-exception --test-timeout=120000 --test-force-exit --test-reporter spec --test-concurrency 1",
-    "test:optimize": "node --trace-deopt build/trace/benchmark.js | grep bailout",
     "syntax": "tsc",
     "test:live": "podman  build --ulimit nofile=1048576:1048576 -f test/Dockerfile ."
   },
@@ -59,7 +58,7 @@
   "usage": "Test with podman  build --ulimit nofile=1048576:1048576 -f test/Dockerfile .",
   "packageManager": "yarn@4.3.1",
   "dependencies": {
-    "ulidx": "2.3.0"
+    "ulidx": "2.4.0"
   },
   "prettier": {
     "trailingComma": "es5",
