@@ -397,6 +397,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   FreeSwitchPublicResponseEvents
 > {
   public closed = true
+  public initialized = false
 
   /** Uniquely identify each instance, for tracing purposes. */
   private readonly __ref: string = ulid()
@@ -591,7 +592,18 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
     this.__socket.on('error', socketOnError)
   }
 
+  /**
+   *  init() — internal method
+   *
+   *  This method is called automatically by FreeSwitchClient after authorization.
+   *  It initializes the connection with FreeSwitch.
+   */
   init(): void {
+    if (this.initialized) {
+      return
+    }
+    this.initialized = true
+
     this.on('CHANNEL_EXECUTE_COMPLETE', (res: FreeSwitchEventData) => {
       const eventUUID = res.body.applicationUUID
       if (eventUUID != null) {

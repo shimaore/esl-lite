@@ -32,8 +32,6 @@ client.on('connect', function (service): void {
   // `service` is a FreeSwitchResponse object
 
   // Listen for FreeSwitch events
-  service.event_json(['CHANNEL_CREATE'])
-
   service.on('CHANNEL_CREATE', function (msg) {
     // The entire body set is available…
     console.log('CHANNEL_CREATE', msg.body.data)
@@ -46,6 +44,9 @@ client.on('connect', function (service): void {
       // ^^ Notice this returns a Promise and the code should `await` or `catch` it
     }
   })
+
+  // For CUSTOM messages with Event-Subclass, use the `.custom` event-emitter.
+  service.custom.on('conference::maintenance', function (msg) {})
 
   // Send generic commands
   service.bgapi('originate sofia/profile/sip:destination@host &park')
@@ -66,3 +67,11 @@ for the main classes.
 The primary repository is https://g.rie.re/shimaore/esl-lite
 
 Also available on [Github](https://github.com/shimaore/esl-lite) and [Gitlab](https://gitlab.com/shimaore/esl-lite).
+
+## Changelog
+
+### v2.0.0
+
+- added automatic `event json` when subscribing to events
+- made `.event_json` method private since it is no longer needed
+  — added `service.custom` event-emitter to properly serve CUSTOM events
