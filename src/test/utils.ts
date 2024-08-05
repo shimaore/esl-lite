@@ -5,30 +5,27 @@ import {
   type FreeSwitchParserNonEmptyBufferAtEndError,
 } from '../esl-lite.js'
 import type * as legacyESL from 'esl'
-import {
-  simpleStartClient,
-  simpleStartServer,
-  simpleStop,
-} from './tools.js'
+import { simpleStartClient, simpleStartServer, simpleStop } from './tools.js'
 import { TestContext } from 'node:test'
 import { inspect } from 'node:util'
 
-export const DoCatch = function <T>(
-  t: TestContext,
-  f: () => Promise<T>
-): void {
+export const DoCatch = function <T>(t: TestContext, f: () => Promise<T>): void {
   void f().catch(t.diagnostic.bind(t))
 }
 
-export const start = async (
-): Promise<void> => {
+export const start = async (): Promise<void> => {
   await Promise.all([startClient('ignore'), startServer('ignore')])
 }
 
-export const clientLogger = function ( withDebug: boolean = false
+export const clientLogger = function (
+  withDebug: boolean = false
 ): FreeSwitchClientLogger {
   return {
-    debug: withDebug ? (msg, obj) => { console.debug('clientLogger:debug', msg, obj) } : () => {},
+    debug: withDebug
+      ? (msg, obj) => {
+          console.debug('clientLogger:debug', msg, obj)
+        }
+      : () => {},
     info: (msg, obj) => {
       console.info('clientLogger:info', msg, obj)
     },
@@ -38,8 +35,7 @@ export const clientLogger = function ( withDebug: boolean = false
   }
 }
 
-export const serverLogger = function (
-): FreeSwitchClientLogger {
+export const serverLogger = function (): FreeSwitchClientLogger {
   return {
     // debug: (msg, obj) => { t.log('serverLogger:debug', msg, obj) },
     debug: () => {},
@@ -86,7 +82,7 @@ export const stop = async (): Promise<void> => {
 export const onceConnected = async (
   client: FreeSwitchClient
 ): Promise<FreeSwitchResponse> => {
-  return client.onceAsync('connect').then( ([call]) => call )
+  return client.onceAsync('connect').then(([call]) => call)
 }
 export const onceWarning = async (
   client: FreeSwitchClient

@@ -500,12 +500,14 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   /** The `FreeSwitchResponse` is bound to a single socket (dual-stream). */
   constructor(socket: Socket, logger: FreeSwitchResponseLogger) {
     super(
-      (event: EventName) => { this.event_json(event) }
+      (event: EventName) => {
+        this.event_json(event)
+      }
       // (event:EventName) => { this.nixevent(event) },
     )
-    this.custom = new FreeSwitchEventEmitter(
-      (subclass: string) => { this.event_json_custom(subclass) }
-    )
+    this.custom = new FreeSwitchEventEmitter((subclass: string) => {
+      this.event_json_custom(subclass)
+    })
 
     socket.setKeepAlive(true)
     socket.setNoDelay(true)
@@ -874,7 +876,11 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
    *
    * This method is not expected to throw / return a rejected Promise.
    */
-  async send(command: string, commandHeaders: ValueMap, timeout: number): SendResult {
+  async send(
+    command: string,
+    commandHeaders: ValueMap,
+    timeout: number
+  ): SendResult {
     if (this.closed) {
       return new FreeSwitchClosedError('before sending')
     }
@@ -1171,11 +1177,11 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
    * This method is not expected to throw / return a rejected Promise.
    */
   private event_json(event: EventName): void {
-    this.send(
-      `event json ${event}`,
-      {},
-      this.localTimeout
-    ).catch( (err:unknown) => { this.logger.error('event_json', { ref: this.ref(), err }) } )
+    this.send(`event json ${event}`, {}, this.localTimeout).catch(
+      (err: unknown) => {
+        this.logger.error('event_json', { ref: this.ref(), err })
+      }
+    )
   }
 
   /**
@@ -1187,11 +1193,11 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
    * This method is not expected to throw / return a rejected Promise.
    */
   private event_json_custom(subclass: string): void {
-    this.send(
-      `event json CUSTOM ${subclass} `,
-      {},
-      this.localTimeout
-    ).catch( (err:unknown) => { this.logger.error('event_json_custom', { ref: this.ref(), err }) } )
+    this.send(`event json CUSTOM ${subclass} `, {}, this.localTimeout).catch(
+      (err: unknown) => {
+        this.logger.error('event_json_custom', { ref: this.ref(), err })
+      }
+    )
   }
 
   /**
@@ -1200,11 +1206,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
    * This method is not expected to throw / return a rejected Promise.
    */
   async nixevent(event: EventName): SendResult {
-    return await this.send(
-      `nixevent ${event}`,
-      {},
-      this.localTimeout
-    )
+    return await this.send(`nixevent ${event}`, {}, this.localTimeout)
   }
 
   /**

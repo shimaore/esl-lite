@@ -16,10 +16,10 @@ const socket = {
 } as unknown as Socket
 
 void describe('01-args', async () => {
-void it('01-args: should report properly on closed (bgapi)', async function (t) {
-  const T = new FreeSwitchResponse(socket, logger(t))
-  T.closed = true
-  const res = await T.bgapi('foo', 1000)
-  assert(res instanceof FreeSwitchClosedError, 'Expect FreeSwitchClosedError')
-})
+  void it('01-args: should report properly on closed (bgapi)', async function (t) {
+    const T = new FreeSwitchResponse(socket, logger(t))
+    T.closed = true
+    const res = await T.bgapi('foo', 1000)
+    assert(res instanceof FreeSwitchClosedError, 'Expect FreeSwitchClosedError')
+  })
 })
