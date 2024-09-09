@@ -1150,8 +1150,8 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
    *
    * `bgapi` will return an error if the job submission fails.
    *
-   * It will not return an error if the job itself failed.
-   * The response from the background job will be stored in the `response` field of the return value.
+   * It will not return an error if the bakcground job itself failed.
+   * The response from the background job will be stored in the `.body.response` field of the return value.
    *
    * This method is not expected to throw / return a rejected Promise.
    */
