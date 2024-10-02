@@ -1,5 +1,5 @@
-export * from './client.js'
 export * from './response.js'
 export * from './parser.js'
 export * from './event-emitter.js'
 export * from './event-names.js'
+export * from './client.js'

@@ -29,19 +29,20 @@
     "types": "./types/src/esl-lite.d.ts"
   },
   "devDependencies": {
-    "@eslint/js": "9.8.0",
+    "@eslint/js": "9.11.1",
     "@tsconfig/node21": "21.0.3",
     "@tsconfig/strictest": "2.0.5",
-    "@types/eslint__js": "^8.42.3",
-    "@types/node": "22.1.0",
+    "@types/eslint__js": "8.42.3",
+    "@types/node": "22.7.4",
     "@types/uuid": "10.0.0",
-    "esbuild": "0.23.0",
+    "esbuild": "0.24.0",
     "esl": "11.2.1",
-    "eslint": "9.8.0",
+    "eslint": "9.11.1",
+    "pino": "9.4.0",
     "prettier": "3.3.3",
-    "typedoc": "0.26.5",
-    "typescript": "5.5.4",
-    "typescript-eslint": "7.18.0",
+    "typedoc": "0.26.7",
+    "typescript": "5.6.2",
+    "typescript-eslint": "8.8.0",
     "uuid": "10.0.0"
   },
   "scripts": {
@@ -49,7 +50,6 @@
     "prepublishOnly": "yarn install && yarn build && yarn syntax",
     "lint": "yarn prepublishOnly && eslint --fix src/**/*.ts && yarn postlint",
     "postlint": "prettier -w . && typedoc 'src/*.ts'",
-    "test": "yarn prepublishOnly && node --test --abort-on-uncaught-exception --report-uncaught-exception --test-timeout=120000 --test-force-exit --test-reporter spec --test-concurrency 1",
     "syntax": "tsc",
     "test:live": "podman  build --ulimit nofile=1048576:1048576 -f test/Dockerfile ."
   },
@@ -59,7 +59,8 @@
   "usage": "Test with podman  build --ulimit nofile=1048576:1048576 -f test/Dockerfile .",
   "packageManager": "yarn@4.3.1",
   "dependencies": {
-    "ulidx": "2.4.0"
+    "ulidx": "2.4.1",
+    "yocto-queue": "1.1.1"
   },
   "prettier": {
     "trailingComma": "es5",

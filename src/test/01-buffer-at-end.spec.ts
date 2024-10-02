@@ -1,19 +1,17 @@
 import { it } from 'node:test'
-import {
-  FreeSwitchClient,
-  FreeSwitchParserNonEmptyBufferAtEndError,
-} from '../esl-lite.js'
+import { FreeSwitchClient } from '../esl-lite.js'
 
 import { createServer } from 'node:net'
 
-import { sleep } from './tools.js'
-import { clientLogger, onceWarning } from './utils.js'
+import { sleep } from '../sleep.js'
+import { clientLogger } from './utils.js'
 import assert from 'node:assert'
 
 const clientPort = 5621
 
-void it('01-buffer-at-end: should be empty at end of stream', (t) =>
-  new Promise((resolve, reject) => {
+void it('01-buffer-at-end: should be empty at end of stream', async () => {
+  const logger = clientLogger()
+  await new Promise((resolve, reject) => {
     try {
       const spoof = createServer({
         keepAlive: true,
@@ -35,42 +33,37 @@ Content-Length: 3
 
 Disconnected, filling your buffer with junk.
 `)
-            } catch (ex: any) {
-              t.diagnostic(ex.toString())
-              reject(ex)
+            } catch (err: unknown) {
+              logger.error({ err })
+              reject(err as Error)
             }
-            spoof.close()
+            c.end()
           })()
         })
       })
       spoof.on('listening', function () {
-        t.diagnostic('Server ready')
+        logger.info('Server ready')
       })
       spoof.listen({
         port: clientPort,
       })
       ;(async () => {
-        const logger = clientLogger()
         const client = new FreeSwitchClient({
           host: '127.0.0.1',
           port: clientPort,
           logger,
         })
-        const pExpect = onceWarning(client)
-        client.connect()
-        t.diagnostic('buffer-at-end: called connect')
-        const error = await pExpect
-        t.diagnostic(`buffer-at-end: got error ${error}`)
-        assert.strictEqual(
-          error instanceof FreeSwitchParserNonEmptyBufferAtEndError,
-          true,
-          'Buffer is not empty at end of stream'
-        )
+        await sleep(1000)
         client.end()
         spoof.close()
+        assert(
+          client.stats.nonEmptyBufferAtEnd > 0n,
+          'Buffer is empty at end of stream'
+        )
       })().then(resolve, reject)
-    } catch (error) {
-      t.diagnostic(`buffer-at-end: unexpected failure ${error}`)
-      reject(error)
+    } catch (error: unknown) {
+      logger.info(`buffer-at-end: unexpected failure ${error as Error}`)
+      reject(error as Error)
     }
-  }))
+  })
+})

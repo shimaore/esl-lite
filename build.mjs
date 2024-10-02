@@ -6,7 +6,7 @@ esbuild.build({
   format: 'cjs',
   outfile: 'esl-lite.cjs',
   platform: 'node',
-  target: 'node18',
+  target: 'node22',
 })
 
 esbuild.build({
@@ -15,5 +15,5 @@ esbuild.build({
   format: 'esm',
   outfile: 'esl-lite.mjs',
   platform: 'node',
-  target: 'node18',
+  target: 'node22',
 })

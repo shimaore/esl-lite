@@ -1,13 +1,13 @@
 import { after, before, describe, it } from 'node:test'
 
-import { clientLogger, onceConnected, startServer, stop } from './utils.js'
+import { clientLogger, startServer, stop } from './utils.js'
 import { FreeSwitchClient } from '../esl-lite.js'
-import { second } from './tools.js'
 import { inspect } from 'node:util'
+import { second } from '../sleep.js'
 
 const serverPort = 8022
 
-describe('10-server-image.spec', () => {
+void describe('10-server-image.spec', () => {
   before(
     async () => {
       await startServer()
@@ -16,7 +16,7 @@ describe('10-server-image.spec', () => {
   )
   after(stop, { timeout: 12 * second })
 
-  it(
+  void it(
     '10-server-image: should be reachable',
     { timeout: 4 * second },
     async () => {
@@ -24,14 +24,11 @@ describe('10-server-image.spec', () => {
         port: serverPort,
         logger: clientLogger(),
       })
-      const p = onceConnected(client)
-      client.connect()
-      await p
       client.end()
     }
   )
 
-  it(
+  void it(
     '10-server-image: should reloadxml',
     { timeout: 6 * second },
     async function (t) {
@@ -40,17 +37,14 @@ describe('10-server-image.spec', () => {
         port: serverPort,
         logger: clientLogger(),
       })
-      const p = onceConnected(client)
-      client.connect()
-      const call = await p
-      const res = await call.bgapi(cmd, 300)
+      const res = await client.bgapi(cmd, 300)
       t.diagnostic(inspect(res))
       let outcome = undefined
       if (res instanceof Error) {
         outcome = new Error(res.message)
       } else {
         if (typeof res.body.response === 'string') {
-          outcome = res.body.response.match(/\+OK \[Success\]/)
+          outcome = /\+OK \[Success\]/.exec(res.body.response)
         }
       }
       client.end()

@@ -2,20 +2,14 @@ import { after, before, describe, it } from 'node:test'
 
 import * as legacyESL from 'esl'
 
-import {
-  startServer,
-  stop,
-  clientLogger,
-  serverLogger,
-  onceConnected,
-} from './utils.js'
-import { second, sleep } from './tools.js'
+import { startServer, stop, clientLogger, serverLogger } from './utils.js'
 import { FreeSwitchClient } from '../esl-lite.js'
 import assert from 'node:assert'
+import { second, sleep } from '../sleep.js'
 
 // Using UUID (in client mode)
 // ---------------------------
-describe('10-uuid.spec', () => {
+void describe('10-uuid.spec', () => {
   before(() => startServer(), { timeout: 12 * second })
   after(stop, { timeout: 12 * second })
 
@@ -80,7 +74,7 @@ describe('10-uuid.spec', () => {
     { timeout: 10 * second }
   )
 
-  it(
+  void it(
     'should handle UUID-based commands',
     { timeout: 20 * second },
     async () => {
@@ -89,10 +83,8 @@ describe('10-uuid.spec', () => {
         port: serverPort,
         logger,
       })
-      client.connect()
-      const call = await onceConnected(client)
       const originationUUID = '1829'
-      const res1 = await call.bgapi(
+      const res1 = await client.bgapi(
         `originate {origination_uuid=${originationUUID},origination_channel_name='1234'}sofia/test-server/sip:answer-wait-30000@${domain} &park`,
         20000
       )
@@ -104,7 +96,7 @@ describe('10-uuid.spec', () => {
         assert.strictEqual(res1.body.response, `+OK ${originationUUID}\n`)
       }
       await sleep(1000)
-      const res2 = await call.command_uuid(
+      const res2 = await client.command_uuid(
         originationUUID,
         'hangup',
         undefined,
@@ -122,20 +114,18 @@ describe('10-uuid.spec', () => {
     }
   )
 
-  it('should map sequential responses', async function () {
+  void it('should map sequential responses', async function () {
     const client = new FreeSwitchClient({
       port: serverPort,
       logger: clientLogger(),
     })
-    client.connect()
-    const call = await onceConnected(client)
-    const res1 = await call.bgapi('create_uuid', 100)
+    const res1 = await client.bgapi('create_uuid', 100)
     let outcome = undefined
     if (res1 instanceof Error) {
       outcome = res1
     } else {
       const uuid1 = res1.body.response
-      const res2 = await call.bgapi('create_uuid', 100)
+      const res2 = await client.bgapi('create_uuid', 100)
       if (res2 instanceof Error) {
         outcome = res2
       } else {
@@ -151,20 +141,18 @@ describe('10-uuid.spec', () => {
     }
   })
 
-  it('should map sequential responses (using bgapi)', async function () {
+  void it('should map sequential responses (using bgapi)', async function () {
     const client = new FreeSwitchClient({
       port: serverPort,
       logger: clientLogger(),
     })
-    client.connect()
-    const call = await onceConnected(client)
-    const res1 = await call.bgapi('create_uuid', 100)
+    const res1 = await client.bgapi('create_uuid', 100)
     let outcome = undefined
     if (res1 instanceof Error) {
       outcome = res1
     } else {
       const uuid1 = res1.body.response
-      const res2 = await call.bgapi('create_uuid', 100)
+      const res2 = await client.bgapi('create_uuid', 100)
       if (res2 instanceof Error) {
         outcome = res2
       } else {
@@ -178,16 +166,14 @@ describe('10-uuid.spec', () => {
     }
   })
 
-  it('should map sequential responses (sent in parallel)', async function () {
+  void it('should map sequential responses (sent in parallel)', async function () {
     const client = new FreeSwitchClient({
       port: serverPort,
       logger: clientLogger(),
     })
-    client.connect()
-    const call = await onceConnected(client)
     let uuid1: string | undefined
     let uuid2: string | undefined
-    const p1 = call.bgapi('create_uuid', 200).then((res): null => {
+    const p1 = client.bgapi('create_uuid', 200).then((res): null => {
       if (res instanceof Error) {
         throw res
       }
@@ -197,7 +183,7 @@ describe('10-uuid.spec', () => {
       }
       return null
     })
-    const p2 = call.bgapi('create_uuid', 200).then((res): null => {
+    const p2 = client.bgapi('create_uuid', 200).then((res): null => {
       if (res instanceof Error) {
         throw res
       }
@@ -214,16 +200,14 @@ describe('10-uuid.spec', () => {
     assert.notStrictEqual(uuid1, uuid2, 'UUIDs should be unique')
   })
 
-  it('should work with parallel responses (using bgapi)', async function () {
+  void it('should work with parallel responses (using bgapi)', async function () {
     const client = new FreeSwitchClient({
       port: serverPort,
       logger: clientLogger(),
     })
-    client.connect()
-    const call = await onceConnected(client)
     let uuid1 = null
     let uuid2 = null
-    const p1 = call.bgapi('create_uuid', 100).then((res): null => {
+    const p1 = client.bgapi('create_uuid', 100).then((res): null => {
       if (res instanceof Error) {
         throw res
       }
@@ -231,7 +215,7 @@ describe('10-uuid.spec', () => {
       uuid1 = res.body.response
       return null
     })
-    const p2 = call.bgapi('create_uuid', 100).then((res): null => {
+    const p2 = client.bgapi('create_uuid', 100).then((res): null => {
       if (res instanceof Error) {
         throw res
       }
@@ -246,22 +230,20 @@ describe('10-uuid.spec', () => {
     assert.notStrictEqual(uuid1, uuid2, 'UUIDs should be unique')
   })
 
-  it('should handle errors', { timeout: 2000 }, async function () {
+  void it('should handle errors', { timeout: 2000 }, async function (t) {
     const client = new FreeSwitchClient({
       port: serverPort,
       logger: clientLogger(),
     })
-    client.connect()
-    const call = await onceConnected(client)
     const originationUUID = 'ABCD'
-    await call.bgapi(
+    await client.bgapi(
       `originate {origination_uuid=${originationUUID}}sofia/test-server/sip:answer-wait-30000@${domain} &park`,
       2000
     )
     const ref = process.hrtime.bigint()
     const p = (async () => {
       // parallel
-      const res = await call.command_uuid(
+      const res = await client.command_uuid(
         originationUUID,
         'play_and_get_digits',
         '4 5 3 20000 # silence_stream://4000 silence_stream://4000 choice \\d 1000',
@@ -280,13 +262,13 @@ describe('10-uuid.spec', () => {
         'Hangup-Cause' in res.body.data &&
         res.body.data['Hangup-Cause'] === 'NO_PICKUP'
       ) {
-        true
+        t.diagnostic('OK')
       } else {
         throw new Error('invalid content')
       }
     })()
     await sleep(1000)
-    await call.hangup_uuid(originationUUID, 'NO_PICKUP')
+    await client.hangup_uuid(originationUUID, 'NO_PICKUP', 1_000)
     await sleep(500)
     client.end()
     await p

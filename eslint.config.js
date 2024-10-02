@@ -19,6 +19,7 @@ export default tseslint.config(
       '@typescript-eslint/require-await': 'warn',
       '@typescript-eslint/no-misused-promises': 'error',
       '@typescript-eslint/no-floating-promises': 'error',
+      '@typescript-eslint/consistent-type-definitions': ['error', 'type'],
     },
   },
   {

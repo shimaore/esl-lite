@@ -2,15 +2,15 @@ import { describe, it } from 'node:test'
 
 import { type Socket, createServer } from 'node:net'
 
-import { sleep } from './tools.js'
-import { clientLogger, onceConnected } from './utils.js'
+import { clientLogger } from './utils.js'
 import { FreeSwitchClient } from '../esl-lite.js'
 import { inspect } from 'node:util'
+import { sleep } from '../sleep.js'
 
 const clientPort = 5624
 
-describe('10-wrapper.spec', () => {
-  it('should send commands', { timeout: 30000 }, async function (t) {
+void describe('10-wrapper.spec', () => {
+  void it('should send commands', { timeout: 30000 }, async function (t) {
     let connection = 0
     const service = function (c: Socket): void {
       t.diagnostic(`Server received ${++connection} connection`)
@@ -28,10 +28,10 @@ describe('10-wrapper.spec', () => {
 Reply-Text: +OK accepted
 
 `)
-            if (data.match(/bridge[^]*foo/) != null) {
+            if (/bridge[^]*foo/.exec(data) != null) {
               await sleep(100)
               t.diagnostic('Server writing (execute-complete for bridge)')
-              const $ = data.match(/Event-UUID: (\S+)/i)
+              const $ = /Event-UUID: (\S+)/i.exec(data)
               if ($?.[1] != null) {
                 const eventUUID = $[1]
                 const msg = `Content-Type: text/event-plain
@@ -46,10 +46,10 @@ Application-UUID: ${eventUUID}
                 c.write(msg)
               }
             }
-            if (data.match(/ping[^]*bar/) != null) {
+            if (/ping[^]*bar/.exec(data) != null) {
               await sleep(100)
               t.diagnostic('Server writing (execute-complete for ping)')
-              const $ = data.match(/Event-UUID: (\S+)/i)
+              const $ = /Event-UUID: (\S+)/i.exec(data)
               if ($?.[1] != null) {
                 const eventUUID = $[1]
                 const msg = `
@@ -94,16 +94,11 @@ Content-Type: auth/request
       port: clientPort,
       logger: clientLogger(),
     })
-    t.diagnostic('Awaiting connect')
-    w.connect()
     t.diagnostic('Awaiting FreeSwitchResponse object')
-    const call = await onceConnected(w)
-    t.diagnostic('Client is connected')
-    await call.command_uuid('1234', 'bridge', 'foo', 500)
+    await w.command_uuid('1234', 'bridge', 'foo', 500)
     t.diagnostic('Client sending again')
-    await call.command_uuid('1234', 'ping', 'bar', 500)
+    await w.command_uuid('1234', 'ping', 'bar', 500)
     t.diagnostic('Client requesting end')
-    call.end('Test completed')
     w.end()
     spoof.close()
   })

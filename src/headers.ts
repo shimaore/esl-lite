@@ -51,10 +51,11 @@ export class Headers {
   set(name: string, value: string): void {
     this.headers.set(name, value)
 
-    if (name === 'Content-Length' && value.match(/^\d+$/) != null) {
+    if (name === 'Content-Length' && /^\d+$/.exec(value) != null) {
       this.contentLength = parseInt(value, 10)
       return
     }
+    // Typically `command/reply` will contain the status in the `Reply-Text` header while `api/response` will contain the status in the body.
     if (name === 'Reply-Text') {
       this.replyText = value
       return

@@ -1,28 +1,21 @@
 import { after, before, describe, it } from 'node:test'
 
-import {
-  start,
-  stop,
-  clientLogger,
-  serverLogger,
-  DoCatch,
-  onceConnected,
-} from './utils.js'
+import { start, stop, clientLogger, serverLogger, DoCatch } from './utils.js'
 import { inspect } from 'node:util'
 
 import * as legacyESL from 'esl'
 import { FreeSwitchClient, FreeSwitchFailedCommandError } from '../esl-lite.js'
-import { second, sleep } from './tools.js'
 import { ulid } from 'ulidx'
+import { second, sleep } from '../sleep.js'
 
 const clientPort = 8024
 const domain = '127.0.0.1:5062'
 
-describe('03.spec', () => {
+void describe('03.spec', () => {
   before(start, { timeout: 12 * second })
   after(stop, { timeout: 12 * second })
 
-  it('03-ok', async (t) => {
+  void it('03-ok', async (t) => {
     const server = new legacyESL.FreeSwitchServer({
       all_events: false,
       logger: serverLogger(),
@@ -44,14 +37,11 @@ describe('03.spec', () => {
       port: clientPort,
       logger: clientLogger(),
     })
-    const p = onceConnected(client)
-    client.connect()
-    const service = await p
     t.diagnostic('client: service bgapi originate')
     const uuid = ulid()
-    const res = await service.bgapi(
+    const res = await client.bgapi(
       `originate {origination_uuid=${uuid}}sofia/test-client/sip:server7002@${domain} &park`,
-      1000
+      2000
     )
     t.diagnostic('bgapi response: ' + inspect(res))
     let outcome = undefined
@@ -59,7 +49,7 @@ describe('03.spec', () => {
       outcome = new Error(res.message)
     } else {
       t.diagnostic('client: service hangup')
-      const res2 = await service.hangup_uuid(uuid)
+      const res2 = await client.hangup_uuid(uuid, undefined, 1_000)
       if (res2 instanceof FreeSwitchFailedCommandError) {
         outcome = new Error(res2.response)
       } else if (res2 instanceof Error) {

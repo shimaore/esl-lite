@@ -1,17 +1,9 @@
 import { type ChildProcess, spawn } from 'node:child_process'
 
 import { mkdir, rm } from 'node:fs/promises'
+import { second, sleep } from '../sleep.js'
 
 import { ulid } from 'ulidx'
-
-// Sleep the given amount of milliseconds
-export const sleep = async function (timeout: number): Promise<void> {
-  await new Promise(function (resolve) {
-    setTimeout(resolve, timeout)
-  })
-}
-
-export const second = 1000
 
 export const timer = function (): () => number {
   const now = process.hrtime.bigint()
@@ -70,14 +62,10 @@ export const simpleStartClient = async (
     fsClient.once('exit', function (code, signal): void {
       void (async function () {
         log('fs_client exit', { code, signal })
-        try {
-          await rm(dir, {
-            recursive: true,
-            force: true,
-          })
-        } catch (error1) {
-          true
-        }
+        await rm(dir, {
+          recursive: true,
+          force: true,
+        }).catch(() => true)
         if (code !== 0) {
           process.exit(1)
         }
@@ -110,14 +98,10 @@ export const simpleStartServer = async (
   fsServer.once('exit', function (code, signal): void {
     void (async function () {
       log('fs_server exit', { code, signal })
-      try {
-        await rm(dir, {
-          recursive: true,
-          force: true,
-        })
-      } catch (error1) {
-        true
-      }
+      await rm(dir, {
+        recursive: true,
+        force: true,
+      }).catch(() => true)
       if (code !== 0) {
         process.exit(1)
       }

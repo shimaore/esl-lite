@@ -1,17 +1,11 @@
 import { after, before, describe, it } from 'node:test'
 
-import {
-  start,
-  stop,
-  clientLogger,
-  serverLogger,
-  onceConnected,
-} from './utils.js'
+import { start, stop, clientLogger, serverLogger } from './utils.js'
 
 import * as legacyESL from 'esl'
 
-import { second, sleep } from './tools.js'
 import { FreeSwitchClient } from '../esl-lite.js'
+import { second, sleep } from '../sleep.js'
 import assert from 'node:assert'
 import { inspect } from 'node:util'
 
@@ -127,14 +121,11 @@ void describe('14-base-server.spec', () => {
         port: clientPort,
         logger: clientLogger(),
       })
-      const p = onceConnected(client)
-      client.connect()
-      const service = await p
       ev.on('server7002', function () {
         client.end()
         expectedOutcome--
       })
-      await service.bgapi(
+      await client.bgapi(
         `originate sofia/test-client/sip:server7002@${domain} &bridge(sofia/test-client/sip:answer-wait-3020@${domain})`,
         4000
       )
@@ -154,14 +145,11 @@ void describe('14-base-server.spec', () => {
         port: clientPort,
         logger: clientLogger(),
       })
-      const p = onceConnected(client)
-      client.connect()
-      const service = await p
       ev.on('server7003', function () {
         client.end()
         expectedOutcome--
       })
-      await service.bgapi(
+      await client.bgapi(
         `originate sofia/test-client/sip:server7003@${domain} &bridge(sofia/test-client/sip:answer-wait-3020@${domain})`,
         4000
       )
@@ -185,15 +173,12 @@ void describe('14-base-server.spec', () => {
         port: clientPort,
         logger: clientLogger(),
       })
-      const p = onceConnected(client)
-      client.connect()
-      const service = await p
       ev.on('server7008', function () {
         client.end()
         expectedOutcome--
       })
       try {
-        await service.bgapi(
+        await client.bgapi(
           `originate sofia/test-client/sip:server7008@${domain} &hangup`,
           4000
         )

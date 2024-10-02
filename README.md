@@ -24,36 +24,27 @@ yarn add esl-lite
 
 ```typescript
 import { FreeSwitchClient } from 'esl-lite'
+import pino from 'pino'
 
-const client = new FreeSwitchClient()
+const client = new FreeSwitchClient({ logger: pino.default() })
 
-// FreeSwitchClient will reconnect when needed
-client.on('connect', function (service): void {
-  // `service` is a FreeSwitchResponse object
+client.on('CHANNEL_CREATE', function (msg) {
+  // The entire body set is available…
+  console.log('CHANNEL_CREATE', msg.body.data)
 
-  // Listen for FreeSwitch events
-  service.on('CHANNEL_CREATE', function (msg) {
-    // The entire body set is available…
-    console.log('CHANNEL_CREATE', msg.body.data)
-
-    // … and common content is already loaded.
-    const uuid = msg.body.uniqueID
-    if (uuid) {
-      // Send command to a specific channel!
-      service.command_uuid(uuid, 'answer', '', 4000)
-      // ^^ Notice this returns a Promise and the code should `await` or `catch` it
-    }
-  })
-
-  // For CUSTOM messages with Event-Subclass, use the `.custom` event-emitter.
-  service.custom.on('conference::maintenance', function (msg) {})
-
-  // Send generic commands
-  service.bgapi('originate sofia/profile/sip:destination@host &park')
-  // ^^ Notice this returns a Promise and the code should `await` or `catch` it
+  // … and common fields are already loaded.
+  const uuid = msg.body.uniqueID
+  if (uuid) {
+    // Send command to a specific channel!
+    client.command_uuid(uuid, 'answer', '', 4000).catch( console.error )
+  }
 })
 
-client.connect()
+// Send generic commands
+await await.bgapi('originate sofia/profile/sip:destination@host &park')
+
+// For CUSTOM messages with Event-Subclass, use the `.custom` event-emitter.
+client.custom.on('conference::maintenance', function (msg) { … })
 ```
 
 ## Documentation
@@ -67,6 +58,10 @@ for the main classes.
 The primary repository is https://g.rie.re/shimaore/esl-lite
 
 Also available on [Github](https://github.com/shimaore/esl-lite) and [Gitlab](https://gitlab.com/shimaore/esl-lite).
+
+## About
+
+Written by [Stéphane Alnet](https://del.igh.tf/ul/stephane-alnet/)
 
 ## Changelog
 

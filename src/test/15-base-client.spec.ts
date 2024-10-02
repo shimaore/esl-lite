@@ -1,21 +1,16 @@
 import { after, before, describe, it } from 'node:test'
 
-import {
-  start,
-  stop,
-  clientLogger as logger,
-  clientLogger,
-  onceConnected,
-} from './utils.js'
+import { start, stop, clientLogger as logger, clientLogger } from './utils.js'
 
 import * as legacyESL from 'esl'
 
 import { v4 as uuidv4 } from 'uuid'
 
-import { second, sleep, timer, optionsText } from './tools.js'
+import { timer, optionsText } from './tools.js'
 import { FreeSwitchClient } from '../esl-lite.js'
 import assert from 'node:assert'
 import { inspect } from 'node:util'
+import { second, sleep } from '../sleep.js'
 
 const domain = '127.0.0.1:5062'
 
@@ -29,7 +24,7 @@ const cps = 2
 
 const clientPort = 8024
 
-describe('15-base-client.spec', () => {
+void describe('15-base-client.spec', () => {
   before(start, { timeout: 12 * second })
   after(stop, { timeout: 12 * second })
 
@@ -108,15 +103,12 @@ describe('15-base-client.spec', () => {
         port: clientPort,
         logger: logger(),
       })
-      const p = client.onceAsync('connect')
-      client.connect()
-      const [service] = await p
       const id = uuidv4()
       const options = {
         leg_progress_timeout: 1,
         tracer_uuid: id,
       }
-      const res = await service.bgapi(
+      const res = await client.bgapi(
         `originate [${optionsText(options)}]sofia/test-client/sip:wait-15000-answer@${domain} &park`,
         15000
       )
@@ -137,15 +129,12 @@ describe('15-base-client.spec', () => {
         port: clientPort,
         logger: logger(),
       })
-      const p = client.onceAsync('connect')
-      client.connect()
-      const [service] = await p
       const id = uuidv4()
       const options = {
         leg_timeout: 2,
         tracer_uuid: id,
       }
-      const res = await service.bgapi(
+      const res = await client.bgapi(
         `originate [${optionsText(options)}]sofia/test-client/sip:wait-15000-answer@${domain} &park`,
         15000
       )
@@ -166,16 +155,13 @@ describe('15-base-client.spec', () => {
         port: clientPort,
         logger: logger(),
       })
-      const p = onceConnected(client)
-      client.connect()
-      const service = await p
       const id = uuidv4()
       const options = {
         tracer_uuid: id,
       }
       const duration = timer()
       let success = 0
-      service.on('CHANNEL_HANGUP', function (msg) {
+      client.on('CHANNEL_HANGUP', function (msg) {
         t.diagnostic(`msg = ${inspect(msg)}`)
         if (msg.body.data['variable_tracer_uuid'] === id) {
           const d = duration()
@@ -184,7 +170,7 @@ describe('15-base-client.spec', () => {
           success++
         }
       })
-      await service.bgapi(
+      await client.bgapi(
         `originate [${optionsText(options)}]sofia/test-client/sip:answer-wait-15000@${domain} &park`,
         16_000
       )
@@ -210,26 +196,23 @@ describe('15-base-client.spec', () => {
           port: clientPort,
           logger: logger(),
         })
-        client.on('connect', function (call): void {
-          void (async function () {
-            try {
-              await call.bgapi(
-                `originate sofia/test-client/sip:answer-wait-3000@${domain} &bridge(sofia/test-client/sip:answer-wait-3000@${domain})`,
-                4000
-              )
-              sent += 2
-              await sleep(4000)
-              client.end()
-            } catch (error) {
-              outcome = 'failed'
-              caughtClient++
-              t.diagnostic(
-                `Caught ${caughtClient} client errors: ${inspect(error)}`
-              )
-            }
-          })()
-        })
-        client.connect()
+        void (async function () {
+          try {
+            await client.bgapi(
+              `originate sofia/test-client/sip:answer-wait-3000@${domain} &bridge(sofia/test-client/sip:answer-wait-3000@${domain})`,
+              4000
+            )
+            sent += 2
+            await sleep(4000)
+            client.end()
+          } catch (error) {
+            outcome = 'failed'
+            caughtClient++
+            t.diagnostic(
+              `Caught ${caughtClient} client errors: ${inspect(error)}`
+            )
+          }
+        })()
       }
       for (
         let i = 1, j = 1, ref = count;

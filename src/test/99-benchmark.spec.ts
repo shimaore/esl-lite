@@ -5,7 +5,7 @@ import { FreeSwitchClient } from '../esl-lite.js'
 import * as legacyESL from 'esl'
 
 import { clientLogger, start, stop } from './utils.js'
-import { second, sleep } from './tools.js'
+import { second, sleep } from '../sleep.js'
 import { inspect } from 'node:util'
 
 const clientPort = 8024
@@ -13,6 +13,8 @@ const clientPort = 8024
 const dialplanPort = 7000
 
 const domain = '127.0.0.1:5062'
+
+const showReport = false
 
 void describe('99-benchmark.spec', () => {
   before(start, { timeout: 12 * second })
@@ -60,7 +62,7 @@ void describe('99-benchmark.spec', () => {
         )
       })()
     }
-    const timer = false ? setInterval(report, 1000) : undefined
+    const timer = showReport ? setInterval(report, 1000) : undefined
     let receivedCalls = 0n
     let receivedCompletedCalls = 0n
     const serverHandler = function (call: legacyESL.FreeSwitchResponse): void {
@@ -73,7 +75,7 @@ void describe('99-benchmark.spec', () => {
           await call.hangup()
           receivedCompletedCalls++
         } catch (err) {
-          t.diagnostic(`------ receiving side ${err}`)
+          t.diagnostic(`------ receiving side ${inspect(err)}`)
         }
       })()
     }
@@ -83,34 +85,29 @@ void describe('99-benchmark.spec', () => {
     let runs = attempts
     let sentCalls = 0n
     let failures = 0
-    client.on('connect', function (service): void {
-      void (async function () {
-        t.diagnostic('---------- service ------------')
-        try {
-          let running = true
-          while (runs-- > 0 && running) {
-            await sleep(10) // 100 cps
-            void (async function () {
-              try {
-                await service.bgapi(
-                  `originate sofia/test-client/sip:test@${domain} &park`,
-                  1000
-                )
-                sentCalls++
-              } catch (error) {
-                const err = error
-                t.diagnostic(`------ stopped run ----- ${err}`)
-                running = false
-              }
-            })()
+    t.diagnostic('---------- service ------------')
+    try {
+      let running = true
+      while (runs-- > 0 && running) {
+        await sleep(10) // 100 cps
+        void (async function () {
+          try {
+            await client.bgapi(
+              `originate sofia/test-client/sip:test@${domain} &park`,
+              1000
+            )
+            sentCalls++
+          } catch (error) {
+            const err = error
+            t.diagnostic(`------ stopped run ----- ${inspect(err)}`)
+            running = false
           }
-        } catch (ex) {
-          t.diagnostic(`${ex}`)
-          failures++
-        }
-      })()
-    })
-    client.connect()
+        })()
+      }
+    } catch (ex) {
+      t.diagnostic(inspect(ex))
+      failures++
+    }
     await sleep(20 * second)
     clearInterval(timer)
     client.end()
@@ -120,7 +117,7 @@ void describe('99-benchmark.spec', () => {
       `------ runs: ${runs} sent_calls: ${sentCalls} received_calls: ${receivedCalls} received_completed_calls: ${receivedCompletedCalls} ---------------`
     )
     if (receivedCompletedCalls === attempts && failures === 0) {
-      true
+      t.diagnostic('OK')
     } else {
       throw new Error('failed')
     }

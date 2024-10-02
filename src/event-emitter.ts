@@ -136,7 +136,7 @@ export const once = async <
 /**
  * Type for event handlers for AbortSignalEventEmitter
  */
-export interface AbortSignalEvents {
+export type AbortSignalEvents = {
   abort: (a: undefined) => void
 }
 

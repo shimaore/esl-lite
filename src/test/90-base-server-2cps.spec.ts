@@ -4,9 +4,10 @@ import { FreeSwitchClient, once, FreeSwitchEventEmitter } from '../esl-lite.js'
 
 import { start, stop, clientLogger as logger, clientLogger } from './utils.js'
 
-import { second, sleep } from './tools.js'
+import { second, sleep } from '../sleep.js'
 import * as legacyESL from 'esl'
 import assert from 'node:assert'
+import { inspect } from 'node:util'
 
 const domain = '127.0.0.1:5062'
 
@@ -79,7 +80,7 @@ void describe('90-base-server-2cps.spec', () => {
           return server3.stats.completed++
         })
         // The server builds a list of potential route entries (starting with longest match first)
-        const $ = destination.match(/^lcr\d+-(\d+)$/)
+        const $ = /^lcr\d+-(\d+)$/.exec(destination)
         if ($ == null) return
         const dest = $[1]
         const ids =
@@ -219,18 +220,15 @@ void describe('90-base-server-2cps.spec', () => {
               port: clientPort,
               logger: logger(),
             })
-            const p = once(client, 'connect')
-            client.connect()
-            const [service] = await p
-            await service.bgapi(
+            await client.bgapi(
               `originate sofia/test-client/sip:server7004@${domain} &bridge(sofia/test-client/sip:server7006@${domain})`,
               8000
             )
             sent += 1
             client.end()
           } catch (ex) {
-            t.diagnostic(`${ex}`)
-            throw ex
+            t.diagnostic(`${ex as Error}`)
+            throw ex as Error
           }
         })()
       }
@@ -268,13 +266,10 @@ void describe('90-base-server-2cps.spec', () => {
             port: clientPort,
             logger: logger(),
           })
-          const p = once(client, 'connect')
-          client.connect()
-          const [service] = await p
           // The client then calls using a predefined number, the call should be routed.
           // FIXME: extend the test to provide a list of successful and unsuccessful numbers and make sure they are routed / not routed accordingly.
           // NOTE: This test and many others are done in the [`tough-rate`](https://github.com/shimaore/tough-rate/blob/master/test/call_server.coffee.md#server-unit-under-test) module.
-          await service.bgapi(
+          await client.bgapi(
             `originate sofia/test-client/sip:answer-wait-3050@${domain} &bridge(sofia/test-client/sip:lcr7010-362736237@${domain})`,
             8000
           )
@@ -307,15 +302,12 @@ void describe('90-base-server-2cps.spec', () => {
         port: clientPort,
         logger: logger(),
       })
-      const p = once(client, 'connect')
-      client.connect()
-      const [service] = await p
       const q = once(ev, 'server7022')
-      const res = await service.bgapi(
+      const res = await client.bgapi(
         `originate sofia/test-client/sip:server7022@${domain} &park`,
         8000
       )
-      t.diagnostic(`${res}`)
+      t.diagnostic(`${inspect(res)}`)
       if (res instanceof Error) {
         throw res
       } else {
@@ -323,7 +315,7 @@ void describe('90-base-server-2cps.spec', () => {
         if (typeof response === 'string') {
           assert.strictEqual(response, '-ERR NORMAL_CLEARING\n')
         } else {
-          t.diagnostic(`${response}`)
+          t.diagnostic(inspect(response))
           throw new Error('response is not a string')
         }
       }

@@ -1,8 +1,8 @@
 import { after, before, describe, it } from 'node:test'
 
-import { clientLogger, onceConnected, start, stop } from './utils.js'
+import { clientLogger, start, stop } from './utils.js'
 import { FreeSwitchClient } from '../esl-lite.js'
-import { second } from './tools.js'
+import { second } from '../sleep.js'
 
 const clientPort = 8024
 
@@ -15,9 +15,6 @@ void describe('02.spec', () => {
       port: clientPort,
       logger: clientLogger(),
     })
-    const p = onceConnected(client)
-    client.connect()
-    await p
     client.end()
   })
 })

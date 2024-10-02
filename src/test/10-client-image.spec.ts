@@ -1,20 +1,26 @@
 import { after, before, describe, it } from 'node:test'
 
-import { FreeSwitchClient, once } from '../esl-lite.js'
+import { FreeSwitchClient, ValueMap } from '../esl-lite.js'
 
-import { clientLogger, start, stop, onceConnected } from './utils.js'
-import { second, sleep } from './tools.js'
+import { clientLogger, start, stop } from './utils.js'
 import assert from 'node:assert'
 import { inspect } from 'node:util'
+import { second, sleep } from '../sleep.js'
 
 // We start two FreeSwitch docker.io instances, one is used as the "client" (and is basically our SIP test runner), while the other one is the "server" (and is used to test the `server` side of the package).
 const clientPort = 8024
 
-describe('10-client-image.spec', () => {
+class PublicFreeSwitchClient extends FreeSwitchClient {
+  async sendPublic(command: string, headers: ValueMap, timeout: number) {
+    return await this.send(command, headers, timeout)
+  }
+}
+
+void describe('10-client-image.spec', () => {
   before(start, { timeout: 12 * second })
   after(stop, { timeout: 12 * second })
 
-  it(
+  void it(
     '10-client-image: should be reachable',
     { timeout: 4 * second },
     async () => {
@@ -22,25 +28,19 @@ describe('10-client-image.spec', () => {
         port: clientPort,
         logger: clientLogger(),
       })
-      const p = once(client, 'connect')
-      client.connect()
-      await p
       client.end()
     }
   )
 
-  it(
+  void it(
     '10-client-image: should report @once errors',
     { timeout: 4 * second },
     async function () {
-      const client = new FreeSwitchClient({
+      const client = new PublicFreeSwitchClient({
         port: clientPort,
         logger: clientLogger(),
       })
-      const p = onceConnected(client)
-      client.connect()
-      const call = await p
-      const failure = await call.send('catchme', {}, 100).then(
+      const failure = await client.sendPublic('catchme', {}, 100).then(
         function () {
           return false
         },
@@ -55,7 +55,7 @@ describe('10-client-image.spec', () => {
     }
   )
 
-  it(
+  void it(
     '10-client-image: should properly parse JSON events (no subclass)',
     { timeout: 4 * second },
     async (t) => {
@@ -66,18 +66,15 @@ describe('10-client-image.spec', () => {
         port: clientPort,
         logger: clientLogger(),
       })
-      client.once('reconnecting', () => {
-        client.end()
-      })
 
-      const q = client.onceAsync('connect')
-      client.connect()
-      t.diagnostic('waiting for connection')
-      const [call] = await q
-      const msgP = call.onceAsync('CUSTOM')
-      await call.sendevent('CUSTOM', {
-        'Event-XBar': 'ë°ñA',
-      })
+      const msgP = client.onceAsync('CUSTOM')
+      await client.sendevent(
+        'CUSTOM',
+        {
+          'Event-XBar': 'ë°ñA',
+        },
+        1_000
+      )
       t.diagnostic('waiting for CUSTOM event')
       const [msg] = await msgP
       t.diagnostic('closing')
@@ -91,7 +88,7 @@ describe('10-client-image.spec', () => {
     }
   )
 
-  it(
+  void it(
     '10-client-image: should properly parse JSON events (subclass, no filtering)',
     { timeout: 4 * second },
     async (t) => {
@@ -102,30 +99,26 @@ describe('10-client-image.spec', () => {
         port: clientPort,
         logger: clientLogger(),
       })
-      client.once('reconnecting', () => {
-        client.end()
-      })
-
-      const q = client.onceAsync('connect')
-      client.connect()
-      t.diagnostic('waiting for connection')
-      const [call] = await q
 
       let received = 0
-      call.on('CUSTOM', (msg) => {
-        received++
+      client.on('CUSTOM', (msg) => {
         assert(
           'Event-Name' in msg.body.data &&
             msg.body.data['Event-Name'] === 'CUSTOM' &&
             'Event-XBar' in msg.body.data &&
             msg.body.data['Event-YBar'] === 'ë°ñ'
         )
+        received++
       })
 
-      await call.sendevent('CUSTOM', {
-        'Event-Subclass': 'json::precious',
-        'Event-YBar': 'ë°ñ',
-      })
+      await client.sendevent(
+        'CUSTOM',
+        {
+          'Event-Subclass': 'json::precious',
+          'Event-YBar': 'ë°ñ',
+        },
+        1_000
+      )
       t.diagnostic('waiting for CUSTOM event')
       await sleep(1000)
       t.diagnostic('closing')
@@ -137,31 +130,28 @@ describe('10-client-image.spec', () => {
     }
   )
 
-  it(
+  void it(
     '10-client-image: should properly parse JSON events (subclass, take 1)',
     { timeout: 4 * second },
     async (t) => {
       t.diagnostic(
         'Should properly parse JSON events (subclass, take 1): create client'
       )
-      const client = new FreeSwitchClient({
+      const client = new PublicFreeSwitchClient({
         port: clientPort,
         logger: clientLogger(),
       })
-      client.once('reconnecting', () => {
-        client.end()
-      })
 
-      const q = client.onceAsync('connect')
-      client.connect()
-      t.diagnostic('waiting for connection')
-      const [call] = await q
-      await call.send('event json CUSTOM json::precious ', {}, 100)
-      const msgP = call.onceAsync('CUSTOM')
-      await call.sendevent('CUSTOM', {
-        'Event-Subclass': 'json::precious',
-        'Event-XBar': 'ë°ñ1',
-      })
+      await client.sendPublic('event json CUSTOM json::precious ', {}, 100)
+      const msgP = client.onceAsync('CUSTOM')
+      await client.sendevent(
+        'CUSTOM',
+        {
+          'Event-Subclass': 'json::precious',
+          'Event-XBar': 'ë°ñ1',
+        },
+        1_000
+      )
       t.diagnostic('waiting for CUSTOM event')
       const [msg] = await msgP
       t.diagnostic('closing')
@@ -175,7 +165,7 @@ describe('10-client-image.spec', () => {
     }
   )
 
-  it(
+  void it(
     '10-client-image: should properly parse JSON events (subclass, take 2)',
     { timeout: 4 * second },
     async (t) => {
@@ -186,19 +176,16 @@ describe('10-client-image.spec', () => {
         port: clientPort,
         logger: clientLogger(),
       })
-      client.once('reconnecting', () => {
-        client.end()
-      })
 
-      const q = client.onceAsync('connect')
-      client.connect()
-      t.diagnostic('waiting for connection')
-      const [call] = await q
-      const msgP = call.custom.onceAsync('json::precious2')
-      await call.sendevent('CUSTOM', {
-        'Event-Subclass': 'json::precious2',
-        'Event-YBar': 'ë°ñ2',
-      })
+      const msgP = client.custom.onceAsync('json::precious2')
+      await client.sendevent(
+        'CUSTOM',
+        {
+          'Event-Subclass': 'json::precious2',
+          'Event-YBar': 'ë°ñ2',
+        },
+        1_000
+      )
       t.diagnostic('waiting for CUSTOM event')
       const [msg] = await msgP
       t.diagnostic('closing')
@@ -213,7 +200,7 @@ describe('10-client-image.spec', () => {
     }
   )
 
-  it(
+  void it(
     '10-client-image: should properly parse JSON events (subclass, take 3)',
     { timeout: 4 * second },
     async (t) => {
@@ -224,19 +211,16 @@ describe('10-client-image.spec', () => {
         port: clientPort,
         logger: clientLogger(),
       })
-      client.once('reconnecting', () => {
-        client.end()
-      })
 
-      const q = client.onceAsync('connect')
-      client.connect()
-      t.diagnostic('waiting for connection')
-      const [call] = await q
-      const msgP = call.custom.onceAsync('conference::maintenance')
-      await call.sendevent('CUSTOM', {
-        'Event-Subclass': 'conference::maintenance',
-        'Event-ZBar': 'ë°ñ3',
-      })
+      const msgP = client.custom.onceAsync('conference::maintenance')
+      await client.sendevent(
+        'CUSTOM',
+        {
+          'Event-Subclass': 'conference::maintenance',
+          'Event-ZBar': 'ë°ñ3',
+        },
+        1_000
+      )
       t.diagnostic('waiting for CUSTOM event')
       const [msg] = await msgP
       t.diagnostic('closing')
@@ -253,7 +237,7 @@ describe('10-client-image.spec', () => {
     }
   )
 
-  it(
+  void it(
     '10-client-image: should reloadxml',
     { timeout: 4 * second },
     async (t) => {
@@ -263,13 +247,7 @@ describe('10-client-image.spec', () => {
         logger: clientLogger(),
       })
       const cmd = 'reloadxml'
-      const p = client.onceAsync('connect').then(async ([call]) => {
-        t.diagnostic('connected')
-        await call.bgapi(cmd, 1000)
-      })
-      client.connect()
-      t.diagnostic('waiting for connection')
-      await p
+      await client.bgapi(cmd, 1000)
       t.diagnostic('closing')
       client.end()
       return

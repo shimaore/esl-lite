@@ -2,20 +2,21 @@ import { TestContext, after, before, describe, it } from 'node:test'
 
 import { FreeSwitchClient } from '../esl-lite.js'
 
-import { clientLogger as logger, onceConnected, start, stop } from './utils.js'
+import { clientLogger as logger, start, stop } from './utils.js'
 
 import { v4 as uuidv4 } from 'uuid'
 
-import { second, sleep, timer, optionsText } from './tools.js'
+import { timer, optionsText } from './tools.js'
 import * as legacyESL from 'esl'
 import { inspect } from 'node:util'
 import assert from 'node:assert'
+import { second, sleep } from '../sleep.js'
 
 const clientPort = 8024
 
 const domain = '127.0.0.1:5062'
 
-describe('80-error.spec', () => {
+void describe('80-error.spec', () => {
   before(start, { timeout: 12 * second })
   after(stop, { timeout: 12 * second })
 
@@ -65,23 +66,23 @@ describe('80-error.spec', () => {
               try {
                 await call.command('respond', m[2])
                 await sleep(9999)
-              } catch (e) {
-                console.warn(`${e} (ignored)`)
+              } catch (e: unknown) {
+                console.warn(`${(e as Error).toString()} (ignored)`)
               }
             }
             break
           case destination !== 'foobared':
             try {
               await call.command('respond', '485')
-            } catch (e) {
-              console.warn(`${e} (ignored)`)
+            } catch (e: unknown) {
+              console.warn(`${(e as Error).toString()} (ignored)`)
             }
             break
           default:
             try {
               await call.command('respond', '400')
-            } catch (e) {
-              console.warn(`${e} (ignored)`)
+            } catch (e: unknown) {
+              console.warn(`${(e as Error).toString()} (ignored)`)
             }
         }
         call.end()
@@ -107,29 +108,23 @@ describe('80-error.spec', () => {
     { timeout: 42 * second }
   )
 
-  it('should handle `sofia status`', async function (t) {
+  void it('should handle `sofia status`', async function (t) {
     const client = new FreeSwitchClient({
       port: clientPort,
       logger: logger(),
     })
-    const p = onceConnected(client)
-    client.connect()
-    const service = await p
-    const res = await service.bgapi('sofia status', 1000)
+    const res = await client.bgapi('sofia status', 1000)
     t.diagnostic(inspect(res))
     client.end()
   })
 
-  it('should detect invalid syntax', async function (t) {
+  void it('should detect invalid syntax', async function (t) {
     const client = new FreeSwitchClient({
       port: clientPort,
       logger: logger(),
     })
-    const p = onceConnected(client)
-    client.connect()
-    const service = await p
-    const res = await service.bgapi('originate foobar', 1000)
-    t.diagnostic(`${res} response`)
+    const res = await client.bgapi('originate foobar', 1000)
+    t.diagnostic(`${inspect(res)} response`)
     let outcome = undefined
     if (res instanceof Error) {
       outcome = res
@@ -152,23 +147,24 @@ describe('80-error.spec', () => {
     }
   })
 
-  it('should process normal call', { timeout: 5 * second }, async function (t) {
-    const client = new FreeSwitchClient({
-      port: clientPort,
-      logger: logger(),
-    })
-    const p = onceConnected(client)
-    client.connect()
-    const service = await p
-    const res = await service.bgapi(
-      `originate sofia/test-client/sip:answer-wait-3010@${domain} &park`,
-      4000
-    )
-    t.diagnostic(`API was successful ${res}`)
-    client.end()
-  })
+  void it(
+    'should process normal call',
+    { timeout: 5 * second },
+    async function (t) {
+      const client = new FreeSwitchClient({
+        port: clientPort,
+        logger: logger(),
+      })
+      const res = await client.bgapi(
+        `originate sofia/test-client/sip:answer-wait-3010@${domain} &park`,
+        4000
+      )
+      t.diagnostic(`API was successful ${inspect(res)}`)
+      client.end()
+    }
+  )
 
-  it(
+  void it(
     'should detect invalid (late) syntax',
     { timeout: 5 * second },
     async function (t) {
@@ -180,73 +176,76 @@ describe('80-error.spec', () => {
         port: clientPort,
         logger: logger(),
       })
-      const p = onceConnected(client)
-      client.connect()
-      const service = await p
-      service.once('CHANNEL_EXECUTE_COMPLETE', function (res) {
-        assert.strictEqual(res.body.data['variable_tracer_uuid'], id)
+      const p = client.onceAsync('CHANNEL_EXECUTE_COMPLETE').then(([res]) => {
+        assert.strictEqual(
+          res.body.data['variable_tracer_uuid'],
+          id,
+          'Missing tracer_uuid'
+        )
         assert.strictEqual(
           res.body.data['variable_originate_disposition'],
           'CHAN_NOT_IMPLEMENTED'
         )
       })
-      const res = await service.bgapi(
+      const res = await client.bgapi(
         `originate [${optionsText(options)}]sofia/test-client/sip:answer-wait-3010@${domain} &bridge(foobar)`,
         1000
       )
-      t.diagnostic(`API was successful ${res}`)
-      await sleep(4 * second)
+      if (res instanceof Error) {
+        client.end()
+        throw res
+      }
+      t.diagnostic(`bgapi returned ${inspect(res)}`)
+      await p
       client.end()
     }
   )
 
-  it('should detect missing host', { timeout: 4 * second }, async function (t) {
-    // It shouldn't take us more than 4 seconds (given the value of timer-T2 set to 2000).
-    // The client attempt to connect an non-existent IP address on a valid subnet ("host down").
-    const client = new FreeSwitchClient({
-      port: clientPort,
-      logger: logger(),
-    })
-    const p = onceConnected(client)
-    client.connect()
-    const service = await p
-    const id = uuidv4()
-    const options = {
-      leg_progress_timeout: 8,
-      leg_timeout: 16,
-      tracer_uuid: id,
-    }
-    const duration = timer()
-    const res = await service.bgapi(
-      `originate [${optionsText(options)}]sofia/test-client-open/sip:test@172.17.0.46:9999 &park`,
-      3000
-    )
-    t.diagnostic(`API was successful ${res}`)
-    if (res instanceof Error) {
-      throw res
-    } else {
-      const { response } = res.body
-      if (typeof response === 'string') {
-        assert.match(response, /^-ERR RECOVERY_ON_TIMER_EXPIRE/)
-        const d = duration()
-        assert(d > 1 * second, `Duration is too short (${d}ms)`)
-        assert(d < 3 * second, `Duration is too long (${d}ms)`)
-      } else {
-        console.info(response)
-        throw new Error('response is not a string')
+  void it(
+    'should detect missing host',
+    { timeout: 4 * second },
+    async function (t) {
+      // It shouldn't take us more than 4 seconds (given the value of timer-T2 set to 2000).
+      // The client attempt to connect an non-existent IP address on a valid subnet ("host down").
+      const client = new FreeSwitchClient({
+        port: clientPort,
+        logger: logger(),
+      })
+      const id = uuidv4()
+      const options = {
+        leg_progress_timeout: 8,
+        leg_timeout: 16,
+        tracer_uuid: id,
       }
+      const duration = timer()
+      const res = await client.bgapi(
+        `originate [${optionsText(options)}]sofia/test-client-open/sip:test@172.17.0.46:9999 &park`,
+        3000
+      )
+      t.diagnostic(`API was successful ${inspect(res)}`)
+      if (res instanceof Error) {
+        throw res
+      } else {
+        const { response } = res.body
+        if (typeof response === 'string') {
+          assert.match(response, /^-ERR RECOVERY_ON_TIMER_EXPIRE/)
+          const d = duration()
+          assert(d > 1 * second, `Duration is too short (${d}ms)`)
+          assert(d < 3 * second, `Duration is too long (${d}ms)`)
+        } else {
+          console.info(response)
+          throw new Error('response is not a string')
+        }
+      }
+      client.end()
     }
-    client.end()
-  })
+  )
 
-  it('should detect closed port', { timeout: 2200 }, async function (t) {
+  void it('should detect closed port', { timeout: 2200 }, async function (t) {
     const client = new FreeSwitchClient({
       port: clientPort,
       logger: logger(),
     })
-    const p = onceConnected(client)
-    client.connect()
-    const service = await p
     const id = uuidv4()
     const options = {
       leg_progress_timeout: 8,
@@ -254,11 +253,11 @@ describe('80-error.spec', () => {
       tracer_uuid: id,
     }
     const duration = timer()
-    const res = await service.bgapi(
+    const res = await client.bgapi(
       `originate [${optionsText(options)}]sofia/test-client/sip:test@127.0.0.1:1310 &park`,
       2000
     )
-    t.diagnostic(`API was successful ${res}`)
+    t.diagnostic(`API was successful ${inspect(res)}`)
 
     if (res instanceof Error) {
       throw res
@@ -276,7 +275,7 @@ describe('80-error.spec', () => {
     client.end()
   })
 
-  it(
+  void it(
     'should detect invalid destination',
     { timeout: 2200 },
     async function (t) {
@@ -284,20 +283,17 @@ describe('80-error.spec', () => {
         port: clientPort,
         logger: logger(),
       })
-      const p = onceConnected(client)
-      client.connect()
-      const service = await p
       const id = uuidv4()
       const options = {
         leg_progress_timeout: 8,
         leg_timeout: 16,
         tracer_uuid: id,
       }
-      const res = await service.bgapi(
+      const res = await client.bgapi(
         `originate [${optionsText(options)}]sofia/test-client/sip:foobared@${domain} &park`,
         1000
       )
-      t.diagnostic(`API was successful ${res}`)
+      t.diagnostic(`API was successful ${inspect(res)}`)
       if (res instanceof Error) {
         throw res
       } else {
@@ -321,9 +317,6 @@ describe('80-error.spec', () => {
         port: clientPort,
         logger: logger(),
       })
-      const p = onceConnected(client)
-      client.connect()
-      const service = await p
       const id = uuidv4()
       const options = {
         leg_progress_timeout: 8,
@@ -331,11 +324,11 @@ describe('80-error.spec', () => {
         tracer_uuid: id,
       }
       const duration = timer()
-      const res = await service.bgapi(
+      const res = await client.bgapi(
         `originate [${optionsText(options)}]sofia/test-client/sip:wait-24000-ring-ready@${domain} &park`,
         9000
       )
-      t.diagnostic(`API was successful ${res}`)
+      t.diagnostic(`API was successful ${inspect(res)}`)
       if (res instanceof Error) {
         throw res
       } else {
@@ -361,9 +354,6 @@ describe('80-error.spec', () => {
         port: clientPort,
         logger: logger(),
       })
-      const p = onceConnected(client)
-      client.connect()
-      const service = await p
       const id = uuidv4()
       const options = {
         leg_timeout: 2,
@@ -371,19 +361,19 @@ describe('80-error.spec', () => {
         tracer_uuid: id,
       }
       t.diagnostic('preparing')
-      service.on('CHANNEL_CREATE', function (msg) {
+      client.on('CHANNEL_CREATE', function (msg) {
         assert(
           'variable_tracer_uuid' in msg.body.data &&
             msg.body.data['variable_tracer_uuid'] === id
         )
       })
-      service.on('CHANNEL_ORIGINATE', function (msg) {
+      client.on('CHANNEL_ORIGINATE', function (msg) {
         assert(
           'variable_tracer_uuid' in msg.body.data &&
             msg.body.data['variable_tracer_uuid'] === id
         )
       })
-      service.once('CHANNEL_HANGUP', function (msg) {
+      client.once('CHANNEL_HANGUP', function (msg) {
         assert(
           'variable_tracer_uuid' in msg.body.data &&
             msg.body.data['variable_tracer_uuid'] === id &&
@@ -391,7 +381,7 @@ describe('80-error.spec', () => {
             msg.body.data['variable_sip_term_status'] === code
         )
       })
-      service.on('CHANNEL_HANGUP_COMPLETE', function (msg) {
+      client.on('CHANNEL_HANGUP_COMPLETE', function (msg) {
         assert(
           'variable_tracer_uuid' in msg.body.data &&
             msg.body.data['variable_tracer_uuid'] === id &&
@@ -402,7 +392,7 @@ describe('80-error.spec', () => {
         )
       })
       t.diagnostic(`sending call for ${code}`)
-      const res = await service.bgapi(
+      const res = await client.bgapi(
         `originate {${optionsText(options)}}sofia/test-client/sip:wait-100-respond-${code}@${domain} &park`,
         500
       )
