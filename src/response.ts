@@ -568,6 +568,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
             }
           }
           this.emit(ev.event, ev)
+          this.emit('ALL', ev)
           break
         }
 
@@ -589,11 +590,13 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
             this.custom.emit(subclass, ev)
           }
           this.emit(ev.event, ev)
+          this.emit('ALL', ev)
           break
         }
 
         default: {
           this.emit(ev.event, ev)
+          this.emit('ALL', ev)
           break
         }
       }
