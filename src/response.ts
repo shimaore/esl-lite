@@ -581,6 +581,8 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
               resolver(ev)
             }
           }
+          this.emit(ev.event, ev)
+          this.emit('ALL', ev)
           break
         }
 
@@ -1091,7 +1093,7 @@ export type FreeSwitchPublicResponseEvents = {
   MESSAGE_QUERY: (data: FreeSwitchEventData) => void
   ROSTER: (data: FreeSwitchEventData) => void
   CODEC: (data: FreeSwitchEventData) => void
-  // BACKGROUND_JOB: (data: FreeSwitchEventData) => void
+  BACKGROUND_JOB: (data: FreeSwitchEventData) => void
   DETECTED_SPEECH: (data: FreeSwitchEventData) => void
   DETECTED_TONE: (data: FreeSwitchEventData) => void
   PRIVATE_COMMAND: (data: FreeSwitchEventData) => void
