@@ -40,25 +40,29 @@ export class EslLite {
     return async function* (this: EslLite) {
       this.logger.debug({}, 'connect')
       for await (const socket of this.sockets.connect()) {
-        const writer = (request: WriteRequest) => {
-          this._write(socket, request)
-        }
-
-        this.ee.on('write', writer)
-
-        this.logger.debug({}, 'connected')
-
-        for await (const event of FreeSwitchParser(socket)) {
-          if (event instanceof Error) {
-            yield event
-          } else {
-            yield processRawEvent(event)
+        try {
+          const writer = (request: WriteRequest) => {
+            this._write(socket, request)
           }
+
+          this.ee.on('write', writer)
+
+          this.logger.debug({}, 'connected')
+
+          for await (const event of FreeSwitchParser(socket, this.logger)) {
+            if (event instanceof Error) {
+              yield event
+            } else {
+              yield processRawEvent(event)
+            }
+          }
+
+          this.ee.removeListener('write', writer)
+
+          socket.end()
+        } catch (err) {
+          this.logger.error({ err }, 'connect')
         }
-
-        this.ee.removeListener('write', writer)
-
-        socket.end()
       }
 
       this.logger.info({}, 'Application ended')

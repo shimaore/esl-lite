@@ -13,6 +13,7 @@ export class FreeSwitchSocket {
   private readonly options: {
     host: string
     port: number
+    maxRetryTimeout: number
   }
 
   private running = true
@@ -25,7 +26,12 @@ export class FreeSwitchSocket {
    * @param options.port default: 8021
    * @param options.logger default: `console` Object
    */
-  constructor(options: { host: string; port: number; logger: Logger }) {
+  constructor(options: {
+    host: string
+    port: number
+    maxRetryTimeout?: number
+    logger: Logger
+  }) {
     this.logger = options.logger.child({
       module: 'FreeSwitchSocket',
       ref: this.ref,
@@ -33,6 +39,7 @@ export class FreeSwitchSocket {
     this.options = {
       host: options.host,
       port: options.port,
+      maxRetryTimeout: options.maxRetryTimeout ?? 1_000,
     }
   }
 
@@ -47,73 +54,71 @@ export class FreeSwitchSocket {
       let attempt = 0n
       while (this.running) {
         attempt++
-        this.logger.debug(
-          {
-            options: this.options,
-            attempt: attempt,
-            retry: retry,
-          },
-          'Attempt to connect'
-        )
         // Create a new socket connection
         const socket = new Socket()
 
-        let resolver = undefined as undefined | ((r: unknown) => void)
-
-        const connected = new Promise<void>((resolve) =>
-          socket.once('connect', resolve)
-        ).then(() => true)
-
-        const ended = new Promise<unknown>((resolve, reject) => {
-          socket.once('error', reject)
-          socket.once('end', resolve)
-          resolver = resolve
-        }).then(() => false)
-
-        this.ee.once('end', () => {
-          socket.end()
-        })
-
         try {
+          this.logger.debug(
+            {
+              options: this.options,
+              attempt: attempt,
+              retry: retry,
+            },
+            'Attempt to connect'
+          )
+
+          const connected = new Promise<unknown>((resolve) => {
+            socket.once('connect', resolve)
+          }).then(() => true)
+
+          const ended = new Promise<unknown>((resolve, reject) => {
+            socket.once('error', reject)
+            socket.once('end', resolve)
+          }).then(() => false)
+
+          this.ee.once('end', () => {
+            socket.end()
+          })
+
           socket.connect(this.options)
           const success = await Promise.race([connected, ended])
           if (success) {
+            this.logger.info({ attempt, retry }, 'Connected')
             socket.setKeepAlive(true)
             socket.setNoDelay(true)
             yield socket
           }
 
           const reason = await ended
-          this.logger.debug(
+          this.logger.info(
             { attempt: attempt, retry: retry, reason },
             'Socket completed (remote end sent a FIN packet)'
           )
+          socket.removeAllListeners()
         } catch (error: unknown) {
           const code =
             typeof error === 'object' && error != null && 'code' in error
               ? error.code
               : undefined
-          if (retry < 5000) {
+          if (retry < this.options.maxRetryTimeout) {
             if (code === 'ECONNREFUSED') {
               retry = Math.floor((retry * 1200) / 1000)
             }
+          } else {
+            retry = this.options.maxRetryTimeout
           }
           this.logger.error(
             {
-              attempt: attempt,
-              retry: retry,
+              attempt,
+              retry,
               error,
               code,
             },
             'Socket failed'
           )
+          socket.removeAllListeners()
           if (this.running) {
             await sleep(retry)
-          }
-        } finally {
-          if (resolver != null) {
-            socket.off('error', resolver)
-            socket.off('end', resolver)
           }
         }
       }
