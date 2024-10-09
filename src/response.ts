@@ -446,164 +446,169 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
     this.sendNextCommand = sendNextCommand
 
     for await (const ev of this.lite.connect()) {
-      this.logger.trace({ ev }, 'event')
+      try {
+        this.logger.trace({ ev }, 'event')
 
-      if (ev instanceof Error) {
-        if (ev instanceof FreeSwitchParserNonEmptyBufferAtEndError) {
-          this.logger.info(
-            { buf: ev.buffer.toString() },
-            'Buffer non-empty at end of stream'
-          )
-          this.stats.nonEmptyBufferAtEnd++
-          continue
-        }
-        if (ev instanceof FreeSwitchMissingContentTypeError) {
-          this.stats.missingContentType++
-          continue
-        }
-        if (ev instanceof FreeSwitchMissingEventNameError) {
-          this.stats.missingEventName++
-          continue
-        }
-        if (ev instanceof FreeSwitchInvalidBodyError) {
-          this.stats.bodyParseErrors++
-          continue
-        }
-        if (ev instanceof FreeSwitchUnexpectedRudeRejection) {
-          this.stats.rudeRejections++
-          continue
-        }
-        if (ev instanceof FreeSwitchUnhandledContentTypeError) {
-          this.stats.unhandled++
-          continue
-        }
-        if (ev instanceof FreeSwitchDisconnectNotice) {
-          this.stats.disconnect++
-          continue
-        }
-        if (ev instanceof FreeSwitchUnexpectedApiResponse) {
-          this.stats.apiResponses++
-          continue
-        }
-        continue
-      }
-
-      switch (ev.event) {
-        /** FreeSwitch sends an authentication request when a client connect to the Event Socket.
-         * Caught by the client code, there is no need for application code to monitor this event.
-         * We use it to trigger the remainder of the stack.
-         */
-        case 'freeswitch_auth_request': {
-          this.stats.authRequest++
-
-          const requeue: CommandRequest[] = []
-          if (currentCommand != null) {
-            requeue.push(currentCommand)
-          }
-          if (this.queue.size > 0) {
-            for (const item of this.queue) {
-              requeue.push(item)
-            }
-          }
-
-          /* Rebuild the queue from scratch */
-          this.queue.clear()
-          currentCommand = undefined
-
-          /* Authenticate */
-          this.queue.enqueue({
-            queued: performance.now(),
-            buf: Buffer.from(`auth ${this.password}\n\n`),
-            resolve: (res) => {
-              this.logger.debug({ res }, 'Authenticated')
-            },
-          })
-          this.logger.debug({}, 'Authenticating')
-          /* We call `sendNextCommand()` now because `event_json` etc will call it again. */
-          sendNextCommand()
-
-          /* Registers all know events */
-          this.registeredEventNames.forEach((eventName) => {
-            this.event_json(eventName)
-          })
-          this.registeredCustomSubsclasses.forEach((subclass) => {
-            this.event_json_custom(subclass)
-          })
-
-          /* Finally, re-queue any pending commands */
-          requeue.forEach((item) => this.queue.enqueue(item))
-
-          break
-        }
-
-        case 'freeswitch_command_reply': {
-          this.stats.commandReply++
-          if (currentCommand != null) {
-            const delay = performance.now() - currentCommand.queued
-            this.logger.debug({ delay }, 'Command round-trip time')
-            currentCommand.resolve({ headers: ev.headers, body: ev.body })
-            currentCommand = undefined
-          } else {
-            this.logger.warn(
-              { ev },
-              'Received command-reply while no command was pending'
+        if (ev instanceof Error) {
+          if (ev instanceof FreeSwitchParserNonEmptyBufferAtEndError) {
+            this.logger.info(
+              { buf: ev.buffer.toString() },
+              'Buffer non-empty at end of stream'
             )
+            this.stats.nonEmptyBufferAtEnd++
+            continue
           }
-          sendNextCommand()
-          break
+          if (ev instanceof FreeSwitchMissingContentTypeError) {
+            this.stats.missingContentType++
+            continue
+          }
+          if (ev instanceof FreeSwitchMissingEventNameError) {
+            this.stats.missingEventName++
+            continue
+          }
+          if (ev instanceof FreeSwitchInvalidBodyError) {
+            this.stats.bodyParseErrors++
+            continue
+          }
+          if (ev instanceof FreeSwitchUnexpectedRudeRejection) {
+            this.stats.rudeRejections++
+            continue
+          }
+          if (ev instanceof FreeSwitchUnhandledContentTypeError) {
+            this.stats.unhandled++
+            continue
+          }
+          if (ev instanceof FreeSwitchDisconnectNotice) {
+            this.stats.disconnect++
+            continue
+          }
+          if (ev instanceof FreeSwitchUnexpectedApiResponse) {
+            this.stats.apiResponses++
+            continue
+          }
+          continue
         }
 
-        case 'freeswitch_log_data': {
-          this.logs.emit('log', ev)
-          break
-        }
+        switch (ev.event) {
+          /** FreeSwitch sends an authentication request when a client connect to the Event Socket.
+           * Caught by the client code, there is no need for application code to monitor this event.
+           * We use it to trigger the remainder of the stack.
+           */
+          case 'freeswitch_auth_request': {
+            this.stats.authRequest++
 
-        case 'CHANNEL_EXECUTE_COMPLETE': {
-          const eventUUID = ev.body.applicationUUID
-          if (eventUUID != null) {
-            const resolver = this.executeCompleteMap.get(eventUUID)
-            if (resolver != null) {
-              this.executeCompleteMap.delete(eventUUID)
-              resolver(ev)
+            const requeue: CommandRequest[] = []
+            if (currentCommand != null) {
+              requeue.push(currentCommand)
             }
-          }
-          this.emit(ev.event, ev)
-          this.emit('ALL', ev)
-          break
-        }
-
-        case 'BACKGROUND_JOB': {
-          const jobUUID = ev.body.jobUUID
-          if (jobUUID != null) {
-            const resolver = this.backgroundJobMap.get(jobUUID)
-            if (resolver != null) {
-              this.backgroundJobMap.delete(jobUUID)
-              resolver(ev)
+            if (this.queue.size > 0) {
+              for (const item of this.queue) {
+                requeue.push(item)
+              }
             }
+
+            /* Rebuild the queue from scratch */
+            this.queue.clear()
+            currentCommand = undefined
+
+            /* Authenticate */
+            this.queue.enqueue({
+              queued: performance.now(),
+              buf: Buffer.from(`auth ${this.password}\n\n`),
+              resolve: (res) => {
+                this.logger.debug({ res }, 'Authenticated')
+              },
+            })
+            this.logger.debug({}, 'Authenticating')
+            /* We call `sendNextCommand()` now because `event_json` etc will call it again,
+             * and they will fail if we are not authenticated. */
+            sendNextCommand()
+
+            /* Registers all know events */
+            this.registeredEventNames.forEach((eventName) => {
+              this.event_json(eventName)
+            })
+            this.registeredCustomSubsclasses.forEach((subclass) => {
+              this.event_json_custom(subclass)
+            })
+
+            /* Finally, re-queue any pending commands */
+            requeue.forEach((item) => this.queue.enqueue(item))
+
+            break
           }
-          this.emit(ev.event, ev)
-          this.emit('ALL', ev)
-          break
+
+          case 'freeswitch_command_reply': {
+            this.stats.commandReply++
+            if (currentCommand != null) {
+              const delay = performance.now() - currentCommand.queued
+              this.logger.debug({ delay }, 'Command round-trip time')
+              currentCommand.resolve({ headers: ev.headers, body: ev.body })
+              currentCommand = undefined
+            } else {
+              this.logger.warn(
+                { ev },
+                'Received command-reply while no command was pending'
+              )
+            }
+            sendNextCommand()
+            break
+          }
+
+          case 'freeswitch_log_data': {
+            this.logs.emit('log', ev)
+            break
+          }
+
+          case 'CHANNEL_EXECUTE_COMPLETE': {
+            const eventUUID = ev.body.applicationUUID
+            if (eventUUID != null) {
+              const resolver = this.executeCompleteMap.get(eventUUID)
+              if (resolver != null) {
+                this.executeCompleteMap.delete(eventUUID)
+                resolver(ev)
+              }
+            }
+            this.emit(ev.event, ev)
+            this.emit('ALL', ev)
+            break
+          }
+
+          case 'BACKGROUND_JOB': {
+            const jobUUID = ev.body.jobUUID
+            if (jobUUID != null) {
+              const resolver = this.backgroundJobMap.get(jobUUID)
+              if (resolver != null) {
+                this.backgroundJobMap.delete(jobUUID)
+                resolver(ev)
+              }
+            }
+            this.emit(ev.event, ev)
+            this.emit('ALL', ev)
+            break
+          }
+
+          case 'CUSTOM': {
+            const subclass = ev.body.data['Event-Subclass']
+            if (typeof subclass === 'string') {
+              this.custom.emit(subclass, ev)
+            }
+            this.emit(ev.event, ev)
+            this.emit('ALL', ev)
+            break
+          }
+
+          default: {
+            this.emit(ev.event, ev)
+            this.emit('ALL', ev)
+            break
+          }
         }
 
-        case 'CUSTOM': {
-          const subclass = ev.body.data['Event-Subclass']
-          if (typeof subclass === 'string') {
-            this.custom.emit(subclass, ev)
-          }
-          this.emit(ev.event, ev)
-          this.emit('ALL', ev)
-          break
-        }
-
-        default: {
-          this.emit(ev.event, ev)
-          this.emit('ALL', ev)
-          break
-        }
+        this.logger.trace({}, 'awaiting next event')
+      } catch (err: unknown) {
+        this.logger.error({ err }, 'event processing failed')
       }
-
-      this.logger.trace({}, 'awaiting next event')
     }
 
     currentCommand?.resolve(new FreeSwitchApplicationEndedError())

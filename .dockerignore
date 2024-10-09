@@ -1,4 +1,3 @@
-test/Dockerfile*
 .dockerignore
 yarn-error.log
 build/
@@ -7,12 +6,7 @@ esl-lite.cjs
 esl-lite.mjs
 lib/
 local_docs/
-Makefile
 node_modules/
 .nyc_output/
-routes/
-test/*.log
-test/log/
-test/*.mjs
-test/routes/
 test/Dockerfile
+test-reconnect/Dockerfile
