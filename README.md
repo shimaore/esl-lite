@@ -42,7 +42,7 @@ client.on('CHANNEL_CREATE', (msg) => {
 })
 
 // Send generic commands
-await await.bgapi('originate sofia/profile/sip:destination@host &park')
+await client.bgapi('originate sofia/profile/sip:destination@host &park')
 
 // For CUSTOM messages with Event-Subclass, use the `.custom` event-emitter.
 client.custom.on('conference::maintenance', (msg) => { … })
