@@ -1,7 +1,5 @@
 import { after, before, describe, it } from 'node:test'
 
-import * as legacyESL from 'esl'
-
 import { startServer, stop, clientLogger, serverLogger } from './utils.js'
 import { FreeSwitchClient } from '../esl-lite.js'
 import assert from 'node:assert'
@@ -17,59 +15,57 @@ void describe('10-uuid.spec', () => {
 
   const domain = '127.0.0.1:5062'
 
-  let server: legacyESL.FreeSwitchServer | null = null
-  before(async () => {
-    server = new legacyESL.FreeSwitchServer({
-      all_events: true,
-      my_events: false,
-      logger: serverLogger(),
-    })
+  const sLogger = serverLogger()
+  const server = new FreeSwitchClient({
+    logger: sLogger,
+    port: serverPort,
+  })
 
-    const service = function (
-      call: legacyESL.FreeSwitchResponse,
-      { data }: { data: legacyESL.StringMap }
-    ): void {
+  let count = 0
+  server.on('CHANNEL_CREATE', () => count++ )
+  server.on('CHANNEL_HANGUP_COMPLETE', () => count-- )
+
+  before(async () => {
+    server.on('CHANNEL_CREATE', (call): void => {
+      const direction = call.body.data['Call-Direction']
+      if (direction !== 'inbound') {
+        return
+      }
+      const uniqueId = call.body.uniqueID
+      if (uniqueId == null) {
+        sLogger.error(call, 'No uniqueID')
+        return
+      }
       void (async function () {
         try {
-          const destination = data['variable_sip_req_user']
-          console.info('Service started', { destination })
+          const destination = call.body.data['variable_sip_req_user']
+          sLogger.info({ destination }, 'Service started')
           switch (destination) {
             case 'answer-wait-30000':
-              console.info('Service answer')
-              await call.command('answer')
-              console.info('Service wait 30s')
+              sLogger.info('Service answer')
+              await server.command_uuid(uniqueId, 'answer', undefined, 1_000)
+              sLogger.info('Service wait 30s')
               await sleep(30 * second)
               break
             default:
-              console.info(`Invalid destination ${destination}`)
+              sLogger.info(call, 'Invalid destination')
           }
-          console.info('Service hanging up')
-          await call.hangup()
-          console.info('Service hung up')
+          sLogger.info('Service hanging up')
+          await server.hangup_uuid(uniqueId, '200', 1_000)
+          sLogger.info('Service hung up')
         } catch (ex) {
-          console.error(ex)
+          sLogger.error({ err: ex })
         }
       })()
-    }
-
-    server.on('connection', service)
-
-    server.on('error', function (error) {
-      console.error('Service', error)
-    })
-
-    await server.listen({
-      port: 7000,
     })
   })
 
   after(
     async () => {
       await sleep(7 * second)
-      const count = await server?.getConnectionCount()
-      await server?.close()
+      server.end()
       assert.strictEqual(count, 0, `Oops, ${count} active connections leftover`)
-      console.info('Service closed')
+      sLogger.info('Service closed')
     },
     { timeout: 10 * second }
   )

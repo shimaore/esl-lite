@@ -2,17 +2,21 @@ import { after, before, describe, it } from 'node:test'
 
 import { FreeSwitchClient, once, FreeSwitchEventEmitter } from '../esl-lite.js'
 
-import { start, stop, clientLogger as logger, clientLogger } from './utils.js'
+import { start, stop, clientLogger as logger, serverLogger } from './utils.js'
 
 import { second, sleep } from '../sleep.js'
-import * as legacyESL from 'esl'
 import assert from 'node:assert'
 import { inspect } from 'node:util'
 
 const domain = '127.0.0.1:5062'
 
 // Next test the server at 2 cps call setups per second.
-let server: legacyESL.FreeSwitchServer
+const serverPort = 8022
+const sLogger = serverLogger()
+const server = new FreeSwitchClient({
+  logger: sLogger,
+  port: serverPort,
+})
 
 const clientPort = 8024
 
@@ -49,6 +53,10 @@ void describe('90-base-server-2cps.spec', () => {
     { server7022: () => void }
   >()
 
+  let sCount = 0
+  server.on('CHANNEL_CREATE', () => sCount++)
+  server.on('CHANNEL_HANGUP_COMPLETE', () => sCount--)
+
   before(async function () {
     const db = new Map<
       string,
@@ -69,137 +77,169 @@ void describe('90-base-server-2cps.spec', () => {
       comment: 'some state',
       target: '738829',
     })
-    const service = async function (
-      call: legacyESL.FreeSwitchResponse,
-      { data }: { data: legacyESL.StringMap }
-    ): Promise<void> {
-      const destination = data['variable_sip_req_user']
-      if (destination?.match(/^lcr7010-\d+$/) != null) {
-        server3.stats.received++
-        call.once('freeswitch_disconnect', function () {
-          return server3.stats.completed++
-        })
-        // The server builds a list of potential route entries (starting with longest match first)
-        const $ = /^lcr\d+-(\d+)$/.exec(destination)
-        if ($ == null) return
-        const dest = $[1]
-        const ids =
-          dest != null
-            ? (function () {
-                const results: string[] = []
-                for (
-                  let l = 0, j = 0, ref = dest.length;
-                  ref >= 0 ? j <= ref : j >= ref;
-                  l = ref >= 0 ? ++j : --j
-                ) {
-                  results.push(`route:${dest.slice(0, l)}`)
-                }
-                return results
-              })().reverse()
-            : []
-        // and these are retrieved from the database.
-        const rows = ids.map((k) => db.get(k))
-        // The first successful route is selected.
-        const doc = (function () {
-          const results: { _id: string; comment: string; target: string }[] = []
-          const len = rows.length
-          for (let j = 0; j < len; j++) {
-            const row = rows[j]
-            if (row != null) {
-              results.push(row)
+    server.on('CHANNEL_CREATE', (call) => {
+      const direction = call.body.data['Call-Direction']
+      if (direction !== 'inbound') {
+        return
+      }
+      const uniqueId = call.body.uniqueID
+      if (uniqueId == null) {
+        sLogger.error(call, 'No uniqueID')
+        return
+      }
+      const destination = call.body.data['variable_sip_req_user']
+      if (typeof destination !== 'string') {
+        sLogger.error(call, 'destination not a string')
+        return
+      }
+      ;(async () => {
+        if (/^lcr7010-\d+$/.exec(destination) != null) {
+          server3.stats.received++
+          server.on('CHANNEL_HANGUP_COMPLETE', (call): void => {
+            if (call.body.uniqueID === uniqueId) {
+              server3.stats.completed++
             }
+          })
+          // The server builds a list of potential route entries (starting with longest match first)
+          const $ = /^lcr\d+-(\d+)$/.exec(destination)
+          if ($ == null) return
+          const dest = $[1]
+          const ids =
+            dest != null
+              ? (function () {
+                  const results: string[] = []
+                  for (
+                    let l = 0, j = 0, ref = dest.length;
+                    ref >= 0 ? j <= ref : j >= ref;
+                    l = ref >= 0 ? ++j : --j
+                  ) {
+                    results.push(`route:${dest.slice(0, l)}`)
+                  }
+                  return results
+                })().reverse()
+              : []
+          // and these are retrieved from the database.
+          const rows = ids.map((k) => db.get(k))
+          // The first successful route is selected.
+          const doc = (function () {
+            const results: { _id: string; comment: string; target: string }[] =
+              []
+            const len = rows.length
+            for (let j = 0; j < len; j++) {
+              const row = rows[j]
+              if (row != null) {
+                results.push(row)
+              }
+            }
+            return results
+          })()[0]
+          if (doc != null) {
+            await server.command_uuid(
+              uniqueId,
+              'bridge',
+              `sip:answer-wait-3000-${doc.target}@${domain}`,
+              30_000
+            )
+          } else {
+            console.error(`No route for ${dest}`)
+            await server.hangup_uuid(
+              uniqueId,
+              `500 no route for ${dest}`,
+              1_000
+            )
           }
-          return results
-        })()[0]
-        if (doc != null) {
-          await call.command(
-            `bridge sip:answer-wait-3000-${doc.target}@${domain}`
+          return
+        }
+        if (/^answer-wait-3000-\d+$/.exec(destination) != null) {
+          await server.command_uuid(
+            uniqueId,
+            'hangup',
+            `200 destination ${destination}`,
+            1_000
           )
-        } else {
-          console.error(`No route for ${dest}`)
-          await call.hangup(`500 no route for ${dest}`)
+          return
         }
-        return
-      }
-      if (destination?.match(/^answer-wait-3000-\d+$/) != null) {
-        await call.command('hangup', `200 destination ${destination}`)
-        return
-      }
-      switch (destination) {
-        case 'answer-wait-3050':
-          await call.command('answer')
-          await sleep(3050)
-          await call.command('hangup', '200 answer-wait-3050')
-          break
-        case 'server7022':
-          console.info('Received server7022')
-          await call.command('set', 'a=2')
-          await call.command('set', 'b=3')
-          await call.command('set', 'c=4')
-          console.info('Received server7022: calling exit')
-          await call.exit()
-          console.info('Received server7022: sending event')
-          ev.emit('server7022', undefined)
-          break
-        case 'server7004': {
-          server1.stats.received++
-          // The call is considered completed if FreeSwitch properly notified us it was disconnecting.
-          // This might not mean the call was successful.
-          call.once('freeswitch_disconnect', function () {
-            return server1.stats.completed++
-          })
-          const res = await call.command('answer')
-          assert.strictEqual(res.body['Channel-Call-State'], 'ACTIVE')
-          server1.stats.answered++
-          await sleep(3000)
-          await call.hangup('200 server7004')
-          break
-        }
-        case 'server7006': {
-          server2.stats.received++
-          call.once('freeswitch_disconnect', function () {
-            return server2.stats.completed++
-          })
-          const res = await call.command('answer')
-          assert.strictEqual(res.body['Channel-Call-State'], 'ACTIVE')
-          server2.stats.answered++
-          break
-        }
-        default:
-          throw new Error(`Invalid destination ${destination}`)
-      }
-    }
-    server = new legacyESL.FreeSwitchServer({
-      all_events: false,
-      logger: clientLogger(),
-    })
-    server.on(
-      'connection',
-      function (call, args: { data: legacyESL.StringMap }): void {
-        void (async function () {
-          // console.info('Server-side', call, args)
-          try {
-            await service(call, args)
-          } catch (err) {
-            console.error('Server-side error', err)
+        switch (destination) {
+          case 'answer-wait-3050':
+            await server.command_uuid(uniqueId, 'answer', undefined, 1_0000)
+            await sleep(3050)
+            await server.command_uuid(
+              uniqueId,
+              'hangup',
+              '200 answer-wait-3050',
+              1_000
+            )
+            break
+          case 'server7022':
+            console.info('Received server7022')
+            await server.command_uuid(uniqueId, 'set', 'a=2', 1_000)
+            await server.command_uuid(uniqueId, 'set', 'b=3', 1_000)
+            await server.command_uuid(uniqueId, 'set', 'c=4', 1_000)
+            console.info('Received server7022: calling uuid_kill')
+            await server.bgapi(`uuid_kill ${uniqueId}`, 1_000)
+            console.info('Received server7022: sending event')
+            ev.emit('server7022', undefined)
+            break
+          case 'server7004': {
+            server1.stats.received++
+            // The call is considered completed if FreeSwitch properly notified us it was disconnecting.
+            // This might not mean the call was successful.
+            server.on('CHANNEL_HANGUP_COMPLETE', (call) => {
+              if (call.body.uniqueID === uniqueId) {
+                server1.stats.completed++
+              }
+            })
+            const res = await server.command_uuid(
+              uniqueId,
+              'answer',
+              undefined,
+              1_000
+            )
+            if (res instanceof Error) {
+              throw res
+            }
+            assert.strictEqual(res.body.data['Channel-Call-State'], 'ACTIVE')
+            server1.stats.answered++
+            await sleep(3000)
+            await server.hangup_uuid(uniqueId, '200 server7004', 1_000)
+            break
           }
-        })()
-      }
-    )
-    await server.listen({
-      port: 7000,
+          case 'server7006': {
+            server2.stats.received++
+            server.on('CHANNEL_HANGUP_COMPLETE', (call): void => {
+              if (call.body.uniqueID === uniqueId) {
+                server2.stats.completed++
+              }
+            })
+            const res = await server.command_uuid(
+              uniqueId,
+              'answer',
+              undefined,
+              1_000
+            )
+            if (res instanceof Error) {
+              throw res
+            }
+            assert.strictEqual(res.body.data['Channel-Call-State'], 'ACTIVE')
+            server2.stats.answered++
+            break
+          }
+          default:
+            throw new Error(`Invalid destination ${destination}`)
+        }
+      })().catch((err: unknown) => {
+        sLogger.error({ err })
+      })
     })
-    await sleep(1 * second)
   })
 
   after(
     async function () {
       await sleep(8 * second)
-      const count = await server.getConnectionCount()
-      if (count > 0) {
-        throw new Error(`Oops, ${count} active connections leftover`)
+      server.end()
+      if (sCount > 0) {
+        throw new Error(`Oops, ${sCount} active connections leftover`)
       }
-      await server.close()
     },
     { timeout: 10 * second }
   )

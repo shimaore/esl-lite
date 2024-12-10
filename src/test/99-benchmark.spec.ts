@@ -1,16 +1,29 @@
 import { after, before, describe, it } from 'node:test'
 
-import { FreeSwitchClient } from '../esl-lite.js'
+import { FreeSwitchClient, FreeSwitchEventData } from '../esl-lite.js'
 
-import * as legacyESL from 'esl'
-
-import { clientLogger, start, stop } from './utils.js'
+import { clientLogger, serverLogger, start, stop } from './utils.js'
 import { second, sleep } from '../sleep.js'
 import { inspect } from 'node:util'
 
 const clientPort = 8024
+const serverPort = 8022
 
-const dialplanPort = 7000
+const sLogger = serverLogger()
+const server1 = new FreeSwitchClient({
+  logger: sLogger,
+  port: serverPort,
+})
+let s1Count = 0
+server1.on('CHANNEL_CREATE', () => s1Count++)
+server1.on('CHANNEL_HANGUP_COMPLETE', () => s1Count--)
+const server2 = new FreeSwitchClient({
+  logger: sLogger,
+  port: serverPort,
+})
+let s2Count = 0
+server2.on('CHANNEL_CREATE', () => s2Count++)
+server2.on('CHANNEL_HANGUP_COMPLETE', () => s2Count--)
 
 const domain = '127.0.0.1:5062'
 
@@ -19,7 +32,7 @@ const showReport = false
 void describe('99-benchmark.spec', () => {
   before(start, { timeout: 12 * second })
   after(
-    async function () {
+    async () => {
       // Ava runs tests in parallel, so let's wait long enough for the other tests to
       // complete!
       await sleep(30 * second)
@@ -28,60 +41,61 @@ void describe('99-benchmark.spec', () => {
     { timeout: 50 * second }
   )
 
-  void it('should be reachable', { timeout: 35 * second }, async function (t) {
+  void it('should be reachable', { timeout: 35 * second }, async (t) => {
+    const report = (): void => {
+      t.diagnostic(
+        inspect({
+          server: server1.stats,
+          server2: server2.stats,
+          connection_count: s1Count,
+          max_connections: s2Count,
+          runs,
+          sentCalls,
+          receivedCalls,
+          receivedCompletedCalls,
+        })
+      )
+    }
+    const timer = showReport ? setInterval(report, 1000) : undefined
+
+    let receivedCalls = new Set()
+    let receivedCompletedCalls = new Set()
+    const serverHandler =
+      (server: FreeSwitchClient) =>
+      (call: FreeSwitchEventData): void => {
+        const direction = call.body.data['Call-Direction']
+        if (direction !== 'inbound') {
+          return
+        }
+        const uniqueId = call.body.uniqueID
+        if (uniqueId == null) {
+          return
+        }
+        if (receivedCalls.has(uniqueId)) {
+          return
+        }
+        receivedCalls.add(uniqueId)
+        void (async () => {
+          try {
+            await server.command_uuid(uniqueId, 'ring_ready', undefined, 1_000)
+            await server.command_uuid(uniqueId, 'answer', undefined, 1_000)
+            await sleep(7 * second)
+            await server.hangup_uuid(uniqueId, undefined, 1_000)
+            receivedCompletedCalls.add(uniqueId)
+          } catch (err) {
+            t.diagnostic(`------ receiving side ${inspect(err)}`)
+          }
+        })()
+      }
+    server1.on('CHANNEL_CREATE', serverHandler(server1))
+    server2.on('CHANNEL_CREATE', serverHandler(server2))
+
     const logger = clientLogger()
     const client = new FreeSwitchClient({
       port: clientPort,
       logger,
     })
-    const server = new legacyESL.FreeSwitchServer({
-      logger,
-    })
-    await server.listen({
-      port: dialplanPort,
-    })
-    const server2 = new legacyESL.FreeSwitchServer({
-      logger,
-    })
-    await server2.listen({
-      port: dialplanPort + 1,
-    })
-    const report = function (): void {
-      void (async function () {
-        t.diagnostic(
-          inspect({
-            server: server.stats,
-            server2: server2.stats,
-            connection_count: await server.getConnectionCount(),
-            max_connections: server.getMaxConnections(),
-            runs,
-            sentCalls,
-            receivedCalls,
-            receivedCompletedCalls,
-          })
-        )
-      })()
-    }
-    const timer = showReport ? setInterval(report, 1000) : undefined
-    let receivedCalls = 0n
-    let receivedCompletedCalls = 0n
-    const serverHandler = function (call: legacyESL.FreeSwitchResponse): void {
-      void (async function () {
-        try {
-          receivedCalls++
-          await call.command('ring_ready')
-          await call.command('answer')
-          await sleep(7 * second)
-          await call.hangup()
-          receivedCompletedCalls++
-        } catch (err) {
-          t.diagnostic(`------ receiving side ${inspect(err)}`)
-        }
-      })()
-    }
-    server.on('connection', serverHandler)
-    server2.on('connection', serverHandler)
-    const attempts = 500n
+    const attempts = 500
     let runs = attempts
     let sentCalls = 0n
     let failures = 0
@@ -105,18 +119,18 @@ void describe('99-benchmark.spec', () => {
         })()
       }
     } catch (ex) {
-      t.diagnostic(inspect(ex))
+      t.diagnostic(`------ sending side ${inspect(ex)}`)
       failures++
     }
     await sleep(20 * second)
     clearInterval(timer)
     client.end()
-    await server.close()
-    await server2.close()
+    server1.end()
+    server2.end()
     t.diagnostic(
-      `------ runs: ${runs} sent_calls: ${sentCalls} received_calls: ${receivedCalls} received_completed_calls: ${receivedCompletedCalls} ---------------`
+      `------ runs: ${runs} sent_calls: ${sentCalls} received_calls: ${receivedCalls.size} received_completed_calls: ${receivedCompletedCalls.size} failures: ${failures} attempts: ${attempts} ---------------`
     )
-    if (receivedCompletedCalls === attempts && failures === 0) {
+    if (receivedCompletedCalls.size === attempts && failures === 0) {
       t.diagnostic('OK')
     } else {
       throw new Error('failed')

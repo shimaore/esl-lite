@@ -1,18 +1,23 @@
 {
   "name": "esl-lite",
   "version": "3.0.3",
-  "description": "Client for FreeSwitch Event System",
+  "description": "Client for FreeSwitch Event System mod_event_socket",
+  "homepage": "https://shimaore.github.io/esl-lite/",
   "keywords": [
     "freeswitch",
-    "event"
+    "event",
+    "typescript",
+    "event socket",
+    "mod_event_socket"
   ],
   "author": {
     "name": "Stéphane Alnet",
-    "email": "stephane@shimaore.net"
+    "email": "stephane@shimaore.net",
+    "url": "https://del.igh.tf/ul/stephane-alnet/"
   },
   "repository": {
     "type": "git",
-    "url": "git://g.rie.re/shimaore/esl-lite.git"
+    "url": "git+https://g.rie.re/shimaore/esl-lite.git"
   },
   "type": "module",
   "module": "esl-lite.mjs",
@@ -29,21 +34,20 @@
     "types": "./types/src/esl-lite.d.ts"
   },
   "devDependencies": {
-    "@eslint/js": "9.11.1",
+    "@eslint/js": "9.16.0",
     "@tsconfig/node21": "21.0.3",
     "@tsconfig/strictest": "2.0.5",
     "@types/eslint__js": "8.42.3",
-    "@types/node": "22.7.4",
+    "@types/node": "22.10.1",
     "@types/uuid": "10.0.0",
     "esbuild": "0.24.0",
-    "esl": "11.2.1",
-    "eslint": "9.11.1",
-    "pino": "9.4.0",
-    "prettier": "3.3.3",
-    "typedoc": "0.26.7",
-    "typescript": "5.6.2",
-    "typescript-eslint": "8.8.0",
-    "uuid": "10.0.0"
+    "eslint": "9.16.0",
+    "pino": "9.5.0",
+    "prettier": "3.4.2",
+    "typedoc": "0.27.4",
+    "typescript": "5.7.2",
+    "typescript-eslint": "8.18.0",
+    "uuid": "11.0.3"
   },
   "scripts": {
     "build": "node build.mjs",

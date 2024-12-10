@@ -101,7 +101,7 @@
             <param name="bind-params" value="transport=udp" />
             <param name="caller-id-type"  value="pid" />
             <param name="context" value="private"  />
-            <param name="dialplan" value="XML" />
+            <param name="dialplan" value="inline:park" />
             <param name="disable-register" value="true" />
             <param name="disable-rtp-auto-adjust" value="false" />
             <param name="disable-transcoding" value="true" />

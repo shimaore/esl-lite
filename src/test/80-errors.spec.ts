@@ -2,12 +2,11 @@ import { TestContext, after, before, describe, it } from 'node:test'
 
 import { FreeSwitchClient } from '../esl-lite.js'
 
-import { clientLogger as logger, start, stop } from './utils.js'
+import { clientLogger as logger, serverLogger, start, stop } from './utils.js'
 
 import { v4 as uuidv4 } from 'uuid'
 
 import { timer, optionsText } from './tools.js'
-import * as legacyESL from 'esl'
 import { inspect } from 'node:util'
 import assert from 'node:assert'
 import { second, sleep } from '../sleep.js'
@@ -30,79 +29,90 @@ void describe('80-error.spec', () => {
   // =========================
 
   // The goal is to document how to detect error conditions, especially wrt LCR conditions.
-  let server: legacyESL.FreeSwitchServer | null = null
+  const serverPort = 8022
+  const sLogger = serverLogger()
+  const server = new FreeSwitchClient({
+    port: serverPort,
+    logger: sLogger,
+  })
+  let count = 0
+  server.on('CHANNEL_CREATE', () => count++ )
+  server.on('CHANNEL_HANGUP_COMPLETE', () => count-- )
 
-  before(async function () {
-    const service = function (
-      call: legacyESL.FreeSwitchResponse,
-      { data }: { data: legacyESL.StringMap }
-    ): void {
-      const destination = data['variable_sip_req_user']
-      const m = destination?.match(/^wait-(\d+)-respond-(\d+)$/)
+  before(async () => {
+    server.on('CHANNEL_CREATE', (call) => {
       ;(async () => {
-        switch (false) {
-          case destination !== 'answer-wait-3010':
-            try {
-              await call.command('answer')
-              await sleep(3010)
-            } catch (e) {
-              console.warn('(ignored)', e)
-            }
-            break
-          case destination !== 'wait-24000-ring-ready':
-            await sleep(24000)
-            await call.command('ring_ready').catch(function () {
-              return true
-            })
-            await sleep(9999)
-            break
-          case m == null:
-            if (
-              m != null &&
-              typeof m[1] === 'string' &&
-              typeof m[2] === 'string'
-            ) {
-              await sleep(parseInt(m[1]))
+        const uniqueId = call.body.uniqueID
+        if (uniqueId == null) {
+          sLogger.error(call, 'No uniqueID')
+          return
+        }
+        const destination = call.body.data['variable_sip_req_user']
+        if (typeof destination !== 'string') {
+          sLogger.error(call, 'destination not a string')
+          return
+        }
+        const m = /^wait-(\d+)-respond-(\d+)$/.exec(destination)
+        ;(async () => {
+          switch (false) {
+            case destination !== 'answer-wait-3010':
               try {
-                await call.command('respond', m[2])
-                await sleep(9999)
+                await server.command_uuid(uniqueId, 'answer', undefined, 1_000)
+                await sleep(3010)
+              } catch (e) {
+                console.warn('(ignored)', e)
+              }
+              break
+            case destination !== 'wait-24000-ring-ready':
+              await sleep(24000)
+              await server
+                .command_uuid(uniqueId, 'ring_ready', undefined, 1_000)
+                .catch(function () {
+                  return true
+                })
+              await sleep(9999)
+              break
+            case m == null:
+              if (
+                m != null &&
+                typeof m[1] === 'string' &&
+                typeof m[2] === 'string'
+              ) {
+                await sleep(parseInt(m[1]))
+                try {
+                  await server.command_uuid(uniqueId, 'respond', m[2], 1_000)
+                  await sleep(9999)
+                } catch (e: unknown) {
+                  console.warn(`${(e as Error).toString()} (ignored)`)
+                }
+              }
+              break
+            case destination !== 'foobared':
+              try {
+                await server.command_uuid(uniqueId, 'respond', '485', 1_000)
               } catch (e: unknown) {
                 console.warn(`${(e as Error).toString()} (ignored)`)
               }
-            }
-            break
-          case destination !== 'foobared':
-            try {
-              await call.command('respond', '485')
-            } catch (e: unknown) {
-              console.warn(`${(e as Error).toString()} (ignored)`)
-            }
-            break
-          default:
-            try {
-              await call.command('respond', '400')
-            } catch (e: unknown) {
-              console.warn(`${(e as Error).toString()} (ignored)`)
-            }
-        }
-        call.end()
-      })().catch(console.error)
-    }
-
-    server = new legacyESL.FreeSwitchServer({
-      all_events: false,
-      logger: logger(),
+              break
+            default:
+              try {
+                await server.command_uuid(uniqueId, 'respond', '400', 1_000)
+              } catch (e: unknown) {
+                console.warn(`${(e as Error).toString()} (ignored)`)
+              }
+          }
+        })().catch(console.error)
+      })().catch((ex: unknown) => {
+        sLogger.error({ err: ex })
+      })
     })
-    server.on('connection', service)
-    await server.listen({ port: 7000 })
   })
 
   after(
     async function () {
       await sleep(30 * second)
-      const count = await server?.getConnectionCount()
       assert.strictEqual(count, 0, `Oops, ${count} active connections leftover`)
-      await server?.close()
+      server.end()
       return null
     },
     { timeout: 42 * second }

@@ -3,12 +3,12 @@ import { after, before, describe, it } from 'node:test'
 import { start, stop, clientLogger, serverLogger, DoCatch } from './utils.js'
 import { inspect } from 'node:util'
 
-import * as legacyESL from 'esl'
 import { FreeSwitchClient, FreeSwitchFailedCommandError } from '../esl-lite.js'
 import { ulid } from 'ulidx'
 import { second, sleep } from '../sleep.js'
 
 const clientPort = 8024
+const serverPort = 8022
 const domain = '127.0.0.1:5062'
 
 void describe('03.spec', () => {
@@ -16,22 +16,30 @@ void describe('03.spec', () => {
   after(stop, { timeout: 12 * second })
 
   void it('03-ok', async (t) => {
-    const server = new legacyESL.FreeSwitchServer({
-      all_events: false,
-      logger: serverLogger(),
+    const sLogger = serverLogger()
+    const server = new FreeSwitchClient({
+      port: serverPort,
+      logger: sLogger,
     })
-    server.once('connection', (call) => {
+    server.once('CHANNEL_CREATE', (call) => {
+      const direction = call.body.data['Call-Direction']
+      if (direction !== 'inbound') {
+        return
+      }
+      const uniqueId = call.body.uniqueID
+      if (uniqueId == null) {
+        sLogger.error(call, 'No uniqueId')
+        return
+      }
       DoCatch(t, async () => {
         t.diagnostic('server: call command answer')
-        await call.command('answer')
+        await server.command_uuid(uniqueId, 'answer', undefined, 1_000)
         await sleep(10_000)
         t.diagnostic('server: call command hangup')
-        await call.command('hangup')
+        await server.command_uuid(uniqueId, 'hangup', undefined, 1_000)
         t.diagnostic('server: call end')
-        call.end()
       })
     })
-    await server.listen({ port: 7000 })
 
     const client = new FreeSwitchClient({
       port: clientPort,
@@ -58,7 +66,7 @@ void describe('03.spec', () => {
     }
     t.diagnostic('client: end')
     client.end()
-    await server.close()
+    server.end()
     if (outcome instanceof Error) {
       throw outcome
     }

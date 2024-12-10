@@ -1,8 +1,6 @@
 import { after, before, describe, it } from 'node:test'
 
-import { start, stop, clientLogger as logger, clientLogger } from './utils.js'
-
-import * as legacyESL from 'esl'
+import { start, stop, clientLogger as logger, serverLogger } from './utils.js'
 
 import { v4 as uuidv4 } from 'uuid'
 
@@ -18,7 +16,12 @@ const domain = '127.0.0.1:5062'
 // -----------------------------
 
 // These tests are long-runners.
-let server: legacyESL.FreeSwitchServer
+const serverPort = 8022
+const sLogger = serverLogger()
+const server = new FreeSwitchClient({
+  logger: sLogger,
+  port: serverPort,
+})
 
 const cps = 2
 
@@ -28,56 +31,55 @@ void describe('15-base-client.spec', () => {
   before(start, { timeout: 12 * second })
   after(stop, { timeout: 12 * second })
 
+  let sCount = 0
   before(
-    async () => {
-      const service = async (
-        call: legacyESL.FreeSwitchResponse,
-        { data }: { data: legacyESL.StringMap }
-      ): Promise<void> => {
-        const destination = data['variable_sip_req_user']
-        console.info('received call', destination)
-        switch (destination) {
-          case 'answer-wait-15000':
-            await call.command('answer')
-            await sleep(15 * second)
-            await call.command('hangup', '200 answer-wait-15000')
-            break
-          case 'wait-15000-answer':
-            await sleep(15 * second)
-            await call.command('answer')
-            await sleep(1 * second)
-            await call.command('hangup', '200 answer-wait-15000')
-            break
-          case 'answer-wait-3000':
-            await call.command('answer')
-            await sleep(3 * second)
-            await call
-              .command('hangup', '200 answer-wait-3000')
-              .catch(() => true)
-            break
-          default:
-            console.error(`Invalid destination ${destination}`)
+    () => {
+      server.on('CHANNEL_CREATE', (call) => {
+        const uniqueId = call.body.uniqueID
+        if (uniqueId == null) {
+          sLogger.error(call, 'No uniqueID')
+          return
         }
-      }
-      server = new legacyESL.FreeSwitchServer({
-        all_events: false,
-        logger: clientLogger(),
-      })
-      server.on(
-        'connection',
-        function (call, args: { data: legacyESL.StringMap }) {
-          ;(async function () {
-            // console.info('Server-side', call, args)
-            try {
-              await service(call, args)
-            } catch (err) {
-              console.error('Server-side error', err)
-            }
-          })().catch(console.error)
-        }
-      )
-      await server.listen({
-        port: 7000,
+        sCount++
+        ;(async (): Promise<void> => {
+          const destination = call.body.data['variable_sip_req_user']
+          console.info('received call', destination)
+          switch (destination) {
+            case 'answer-wait-15000':
+              await server.command_uuid(uniqueId, 'answer', undefined, 1_000)
+              await sleep(15 * second)
+              await server.command_uuid(
+                uniqueId,
+                'hangup',
+                '200 answer-wait-15000',
+                1_000
+              )
+              break
+            case 'wait-15000-answer':
+              await sleep(15 * second)
+              await server.command_uuid(uniqueId, 'answer', undefined, 1_000)
+              await sleep(1 * second)
+              await server.command_uuid(
+                uniqueId,
+                'hangup',
+                '200 answer-wait-15000',
+                1_000
+              )
+              break
+            case 'answer-wait-3000':
+              await server.command_uuid(uniqueId, 'answer', undefined, 1_000)
+              await sleep(3 * second)
+              await server
+                .command_uuid(uniqueId, 'hangup', '200 answer-wait-3000', 1_000)
+                .catch(() => true)
+              break
+            default:
+              console.error({ destination }, 'Invalid destination')
+          }
+          sCount--
+        })().catch((err: unknown) => {
+          sLogger.error({ err }, 'Server-side error')
+        })
       })
     },
     { timeout: 12 * second }
@@ -86,10 +88,9 @@ void describe('15-base-client.spec', () => {
   after(
     async () => {
       await sleep(8 * second)
-      const count = await server.getConnectionCount()
-      await server?.close()
-      if (count > 0) {
-        throw new Error(`Oops, ${count} active connections leftover`)
+      server.end()
+      if (sCount > 0) {
+        throw new Error(`Oops, ${sCount} active connections leftover`)
       }
     },
     { timeout: 10 * second }

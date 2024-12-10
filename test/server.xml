@@ -102,7 +102,7 @@
             <param name="bind-params" value="transport=udp" />
             <param name="caller-id-type"  value="pid" />
             <param name="context" value="private"  />
-            <param name="dialplan" value="inline:'socket:127.0.0.1:7000|127.0.0.1:7001 async full'"/>
+            <param name="dialplan" value="inline:park" />
             <param name="disable-register" value="true" />
             <param name="disable-rtp-auto-adjust" value="false" />
             <param name="disable-transcoding" value="true" />
@@ -139,8 +139,12 @@
             <param name="sip-port" value="$${sip_port}" />
             <param name="stun-enabled" value="false" />
             <param name="suppress-cng" value="false" />
-            <param name="user-agent-string" value="esl test-$${name}-$${sip_port}"/>
-            <param name="username" value="esl-test-$${name}"/>
+            <param name="timer-T1" value="250" />
+            <param name="timer-T1X64" value="2000" />
+            <param name="timer-T2" value="2000" />
+            <param name="timer-T4" value="4000" />
+            <param name="user-agent-string" value="esl-lite test-$${name}-$${sip_port}"/>
+            <param name="username" value="esl-lite--test-$${name}"/>
           </settings>
         </profile>
       </profiles>

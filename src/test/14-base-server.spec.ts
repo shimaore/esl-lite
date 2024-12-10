@@ -2,9 +2,7 @@ import { after, before, describe, it } from 'node:test'
 
 import { start, stop, clientLogger, serverLogger } from './utils.js'
 
-import * as legacyESL from 'esl'
-
-import { FreeSwitchClient } from '../esl-lite.js'
+import { FreeSwitchClient, FreeSwitchEventEmitter } from '../esl-lite.js'
 import { second, sleep } from '../sleep.js'
 import assert from 'node:assert'
 import { inspect } from 'node:util'
@@ -17,93 +15,128 @@ const domain = '127.0.0.1:5062'
 // Server startup and connectivity
 // -------------------------------
 
-let server: legacyESL.FreeSwitchServer | null = null
+const serverPort = 8022
+const sLogger = serverLogger()
+const server = new FreeSwitchClient({
+  logger: sLogger,
+  port: serverPort,
+})
 
 const clientPort = 8024
 
 void describe('14-base-server.spec', () => {
-  const ev = new legacyESL.FreeSwitchEventEmitter()
+  const ev = new FreeSwitchEventEmitter<
+    'server7002' | 'server7003' | 'server7008',
+    {
+      server7002: () => void
+      server7003: () => void
+      server7008: () => void
+    }
+  >()
+
+  let count = 0
 
   before(async function () {
-    const service = async function (
-      call: legacyESL.FreeSwitchResponse,
-      { data }: { data: legacyESL.StringMap }
-    ): Promise<void> {
-      // console.info({ data })
-      const destination = data['variable_sip_req_user']
-      console.info('service to', destination)
-      switch (destination) {
-        case 'answer-wait-3020': {
-          await call.command('answer')
-          await sleep(3000)
-          await call.command('hangup', '200 answer-wait-3020')
-          break
-        }
-        case 'server7002': {
-          const res = await call.command('answer')
-          assert.strictEqual(res.body['Channel-Call-State'], 'ACTIVE')
-          await call.command('hangup', '200 server7002')
-          ev.emit('server7002')
-          break
-        }
-        case 'server7003': {
-          const res = await call.command('answer')
-          assert.strictEqual(res.body['Channel-Call-State'], 'ACTIVE')
-          await call.command('hangup', '200 server7003')
-          ev.emit('server7003')
-          break
-        }
-        case 'server7008': {
-          call.once('cleanup_linger', () => {
-            ev.emit('server7008')
-            call.end()
-          })
-          await call.linger()
-          await call.command('answer')
-          await sleep(1000)
-          await call.command('hangup', '200 server7008')
-          break
-        }
-        default:
-          console.error(`Invalid destination ${destination}`)
+    server.on('CHANNEL_CREATE', (call) => {
+      const direction = call.body.data['Call-Direction']
+      if (direction !== 'inbound') {
+        return
       }
-      call.end()
-    }
-    server = new legacyESL.FreeSwitchServer({
-      all_events: false,
-      logger: serverLogger(),
-    })
-    server.on('connection', function (call, args) {
-      console.info('service received connection')
+      const uniqueId = call.body.uniqueID
+      if (uniqueId == null) {
+        sLogger.error(call, 'No uniqueID')
+        return
+      }
       ;(async () => {
-        // console.info('Server-side', call, args)
-        try {
-          await service(call, args)
-        } catch (err) {
-          console.info('Server-side error', err)
+        count++
+        // console.info({ data })
+        const destination = call.body.data['variable_sip_req_user']
+        console.info('service to', destination)
+        switch (destination) {
+          case 'answer-wait-3020': {
+            await server.command_uuid(uniqueId, 'answer', undefined, 1_000)
+            await sleep(3000)
+            await server.command_uuid(
+              uniqueId,
+              'hangup',
+              '200 answer-wait-3020',
+              1_000
+            )
+            break
+          }
+          case 'server7002': {
+            const res = await server.command_uuid(
+              uniqueId,
+              'answer',
+              undefined,
+              1_000
+            )
+            if (res instanceof Error) {
+              sLogger.error({ err: res })
+              throw res
+            } else {
+              assert.strictEqual(res.body.data['Channel-Call-State'], 'ACTIVE')
+            }
+            await server.command_uuid(
+              uniqueId,
+              'hangup',
+              '200 server7002',
+              1_000
+            )
+            ev.emit('server7002', undefined)
+            break
+          }
+          case 'server7003': {
+            const res = await server.command_uuid(
+              uniqueId,
+              'answer',
+              undefined,
+              1_000
+            )
+            if (res instanceof Error) {
+              sLogger.error({ err: res })
+              throw res
+            } else {
+              assert.strictEqual(res.body.data['Channel-Call-State'], 'ACTIVE')
+            }
+            await server.command_uuid(
+              uniqueId,
+              'hangup',
+              '200 server7003',
+              1_000
+            )
+            ev.emit('server7003', undefined)
+            break
+          }
+          case 'server7008': {
+            await server.command_uuid(uniqueId, 'answer', undefined, 1_000)
+            await sleep(1000)
+            await server.command_uuid(
+              uniqueId,
+              'hangup',
+              '200 server7008',
+              1_000
+            )
+            ev.emit('server7008', undefined)
+            break
+          }
+          default:
+            sLogger.error({ destination }, 'Invalid destination')
         }
-      })().catch(console.error)
+        count--
+      })().catch((ex: unknown) => {
+        sLogger.error({ err: ex })
+      })
     })
-    await server.listen({
-      host: '127.0.0.1',
-      port: 7000,
-    })
-    console.info('Service up')
   })
 
   after(
     async function () {
       await sleep(8 * second)
-      const count = await server?.getConnectionCount()
-      let outcome = undefined
-      if (count == null || count > 0) {
-        outcome = `Oops, ${count} active connections leftover`
-      }
-      await server?.close()
+      server.end()
       console.info('Service down', server?.stats)
-      server = null
-      if (outcome != null) {
-        throw new Error(outcome)
+      if (count == null || count > 0) {
+        throw new Error(`Oops, ${count} active connections leftover`)
       }
     },
     { timeout: 10 * second }
