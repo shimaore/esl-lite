@@ -36,8 +36,8 @@ void describe('80-error.spec', () => {
     logger: sLogger,
   })
   let count = 0
-  server.on('CHANNEL_CREATE', () => count++ )
-  server.on('CHANNEL_HANGUP_COMPLETE', () => count-- )
+  server.on('CHANNEL_CREATE', () => count++)
+  server.on('CHANNEL_HANGUP_COMPLETE', () => count--)
 
   before(async () => {
     server.on('CHANNEL_CREATE', (call) => {

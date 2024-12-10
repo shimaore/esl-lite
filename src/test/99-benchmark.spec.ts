@@ -58,8 +58,8 @@ void describe('99-benchmark.spec', () => {
     }
     const timer = showReport ? setInterval(report, 1000) : undefined
 
-    let receivedCalls = new Set()
-    let receivedCompletedCalls = new Set()
+    const receivedCalls = new Set()
+    const receivedCompletedCalls = new Set()
     const serverHandler =
       (server: FreeSwitchClient) =>
       (call: FreeSwitchEventData): void => {

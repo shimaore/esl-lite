@@ -22,8 +22,8 @@ void describe('10-uuid.spec', () => {
   })
 
   let count = 0
-  server.on('CHANNEL_CREATE', () => count++ )
-  server.on('CHANNEL_HANGUP_COMPLETE', () => count-- )
+  server.on('CHANNEL_CREATE', () => count++)
+  server.on('CHANNEL_HANGUP_COMPLETE', () => count--)
 
   before(async () => {
     server.on('CHANNEL_CREATE', (call): void => {
