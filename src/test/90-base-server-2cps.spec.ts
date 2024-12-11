@@ -12,12 +12,6 @@ const domain = '127.0.0.1:5062'
 
 // Next test the server at 2 cps call setups per second.
 const serverPort = 8022
-const sLogger = serverLogger()
-const server = new FreeSwitchClient({
-  logger: sLogger,
-  port: serverPort,
-})
-
 const clientPort = 8024
 
 const cps = 2
@@ -47,6 +41,12 @@ const server2 = {
 }
 
 void describe('90-base-server-2cps.spec', () => {
+  const sLogger = serverLogger()
+  const server = new FreeSwitchClient({
+    logger: sLogger,
+    port: serverPort,
+  })
+
   // We implement a small LCR database using PouchDB.
   const ev = new FreeSwitchEventEmitter<
     'server7022',

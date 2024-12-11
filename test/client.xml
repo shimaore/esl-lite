@@ -15,7 +15,7 @@
         <param name="rtp-start-port" value="$${rtp_start}" />
         <param name="rtp-end-port" value="$${rtp_end}" />
         <param name="max-sessions" value="20000" />
-        <param name="sessions-per-second" value="200" />
+        <param name="sessions-per-second" value="2000" />
         <param name="min-idle-cpu" value="0" />
         <param name="loglevel" value="err" />
       </settings>
@@ -32,7 +32,7 @@
     </configuration>
     <configuration name="console.conf">
       <mappings>
-        <map name="all" value="console,debug,info,notice,warning,err,crit,alert"/>
+        <map name="all" value="warning,err,crit,alert"/>
       </mappings>
       <settings>
         <param name="loglevel" value="err" />

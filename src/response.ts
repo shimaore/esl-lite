@@ -71,6 +71,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
     const q = await this.send(
       `bgapi ${command}`,
       { 'job-uuid': jobUUID },
+      undefined,
       timeout
     )
     this.logger.trace({ q }, 'bgapi: sent')
@@ -123,9 +124,9 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
    */
   async log(level: number, timeout: number): SendResult {
     if (level != null) {
-      return await this.send(`log ${level}`, {}, timeout)
+      return await this.send(`log ${level}`, {}, undefined, timeout)
     } else {
-      return await this.send('log', {}, timeout)
+      return await this.send('log', {}, undefined, timeout)
     }
   }
 
@@ -135,7 +136,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
    * This method is not expected to throw / return a rejected Promise.
    */
   async nolog(timeout: number): SendResult {
-    return await this.send('nolog', {}, timeout)
+    return await this.send('nolog', {}, undefined, timeout)
   }
 
   /**
@@ -151,6 +152,27 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
     return await this.send(
       `sendevent ${eventName}`,
       { 'Event-Name': eventName, ...args },
+      undefined,
+      timeout
+    )
+  }
+
+  /**
+   * Send an event into the FreeSwitch event queue with a body.
+   *
+   * This method is not expected to throw / return a rejected Promise.
+   */
+  async sendeventWithBody(
+    eventName: EventName,
+    args: ValueMap,
+    contentType: string,
+    content: Buffer,
+    timeout: number
+  ): SendResult {
+    return await this.send(
+      `sendevent ${eventName}`,
+      { 'Event-Name': eventName, ...args },
+      { contentType, content },
       timeout
     )
   }
@@ -179,10 +201,14 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
     const options = {
       ...headers,
       'execute-app-name': appName,
-      'execute-app-arg': appArg,
     }
-    return await this.sendmsg_uuid(uuid, 'execute', options, timeout)
-    // TODO: Support the alternate format (with no `execute-app-arg` header but instead a `text/plain` body containing the argument).
+    return await this.sendmsg_uuid(
+      uuid,
+      'execute',
+      options,
+      appArg.length === 0 ? undefined : Buffer.from(appArg),
+      timeout
+    )
   }
 
   /**
@@ -240,7 +266,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
     const options = {
       'hangup-cause': hangupCause,
     }
-    return await this.sendmsg_uuid(uuid, 'hangup', options, timeout)
+    return await this.sendmsg_uuid(uuid, 'hangup', options, undefined, timeout)
   }
 
   /**
@@ -271,7 +297,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
       'local-port': args['local-port'].toString(10),
       'remote-port': args['remote-port'].toString(10),
     } as const
-    return await this.sendmsg_uuid(uuid, 'unicast', options, timeout)
+    return await this.sendmsg_uuid(uuid, 'unicast', options, undefined, timeout)
   }
 
   // nomedia_uuid
@@ -722,6 +748,12 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
   protected async send(
     command: string,
     commandHeaders: ValueMap,
+    commandBody:
+      | undefined
+      | {
+          contentType: string
+          content: Buffer
+        },
     timeout: number
   ): Promise<
     | FreeSwitchEventData
@@ -732,7 +764,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
     | FreeSwitchTimeoutError
   > {
     this.logger.trace(
-      { command, commandHeaders, timeout },
+      { command, commandHeaders, commandBody, timeout },
       'send: await enqueue'
     )
     const value = await new Promise<
@@ -741,7 +773,7 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
       | FreeSwitchTimeoutError
     >((resolve) => {
       this.queue.enqueue({
-        buf: buildCommand(command, commandHeaders),
+        buf: buildCommand(command, commandHeaders, commandBody),
         resolve,
         queued: performance.now(),
       })
@@ -817,12 +849,18 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
     uuid: string,
     command: string,
     args: ValueMap,
+    body: Buffer | undefined,
     timeout: number
   ): SendResult {
     const headers = { ...args, 'call-command': command }
     // alternatively, `uuid` might be specified as header `session-id`
     const executeText = `sendmsg ${uuid}`
-    return await this.send(executeText, headers, timeout)
+    return await this.send(
+      executeText,
+      headers,
+      body == null ? undefined : { contentType: 'text/plain', content: body },
+      timeout
+    )
   }
 
   /**
@@ -942,28 +980,46 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
 }
 
 /**
- * Build a single command for FreeSwitch; `args` is a hash of headers sent with the command.
+ * Build a single command for FreeSwitch.
+ *
+ * @param command — the mod_event_socket command
+ * @param headers — headers sent along with the command
+ * @param body — body of the command
  */
-const buildCommand = (command: string, headers: ValueMap): Buffer => {
-  let text = `${command}\n`
+const buildCommand = (
+  command: string,
+  headers: ValueMap,
+  body: undefined | { contentType: string; content: Buffer }
+): Buffer => {
+  const list: Buffer[] = []
+  list.push(Buffer.from(`${command}\n`))
   for (const key of Object.getOwnPropertyNames(headers)) {
     const value = headers[key]
     if (value != null) {
       switch (typeof value) {
         case 'string':
-          text += `${key}: ${value}\n`
+          list.push(Buffer.from(`${key}: ${value}\n`))
           break
         case 'number':
-          text += `${key}: ${value.toString(10)}\n`
+          list.push(Buffer.from(`${key}: ${value.toString(10)}\n`))
           break
         case 'boolean':
-          text += `${key}: ${value ? 'true' : 'false'}\n`
+          list.push(Buffer.from(`${key}: ${value ? 'true' : 'false'}\n`))
           break
       }
     }
   }
-  text += '\n'
-  return Buffer.from(text)
+  if (body != null) {
+    list.push(Buffer.from(`Content-Type: ${body.contentType}\n`))
+    list.push(
+      Buffer.from(`Content-Length: ${body.content.length.toFixed(0)}\n`)
+    )
+  }
+  list.push(Buffer.from('\n'))
+  if (body != null) {
+    list.push(body.content)
+  }
+  return Buffer.concat(list)
 }
 
 /**

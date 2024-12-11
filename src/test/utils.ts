@@ -25,6 +25,9 @@ export const responseLogger = function (): pino.Logger {
   return pino.default({ name: 'responseLogger' })
 }
 
+export const dummyLogger = () =>
+  pino.default({ name: 'dummyLogger', level: 'warn' })
+
 const startClient = async (
   stdio: 'ignore' | 'inherit' = 'ignore'
 ): Promise<void> => {

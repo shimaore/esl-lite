@@ -12,7 +12,7 @@ const clientPort = 8024
 
 class PublicFreeSwitchClient extends FreeSwitchClient {
   async sendPublic(command: string, headers: ValueMap, timeout: number) {
-    return await this.send(command, headers, timeout)
+    return await this.send(command, headers, undefined, timeout)
   }
 }
 
