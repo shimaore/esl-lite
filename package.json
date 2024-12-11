@@ -1,6 +1,6 @@
 {
   "name": "esl-lite",
-  "version": "3.0.4",
+  "version": "3.1.0",
   "description": "Client for FreeSwitch Event System mod_event_socket",
   "homepage": "https://shimaore.github.io/esl-lite/",
   "keywords": [
