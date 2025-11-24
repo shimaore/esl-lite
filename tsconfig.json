@@ -1,7 +1,7 @@
 {
   "extends": [
     "@tsconfig/strictest/tsconfig.json",
-    "@tsconfig/node21/tsconfig.json"
+    "@tsconfig/node24/tsconfig.json"
   ],
   "compilerOptions": {
     "lib": ["esnext"],

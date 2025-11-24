@@ -1,5 +1,5 @@
 import { simpleStartClient, simpleStartServer, simpleStop } from './tools.js'
-import { TestContext } from 'node:test'
+import { type TestContext } from 'node:test'
 import pino from 'pino'
 
 export const DoCatch = function <T>(t: TestContext, f: () => Promise<T>): void {
@@ -11,22 +11,21 @@ export const start = async (): Promise<void> => {
 }
 
 export const clientLogger = function (withDebug = true): pino.Logger {
-  return pino.default({
+  return pino({
     name: 'clientLogger',
     level: withDebug ? 'trace' : 'info',
   })
 }
 
 export const serverLogger = function (): pino.Logger {
-  return pino.default({ name: 'serverLogger' })
+  return pino({ name: 'serverLogger' })
 }
 
 export const responseLogger = function (): pino.Logger {
-  return pino.default({ name: 'responseLogger' })
+  return pino({ name: 'responseLogger' })
 }
 
-export const dummyLogger = () =>
-  pino.default({ name: 'dummyLogger', level: 'warn' })
+export const dummyLogger = () => pino({ name: 'dummyLogger', level: 'warn' })
 
 const startClient = async (
   stdio: 'ignore' | 'inherit' = 'ignore'

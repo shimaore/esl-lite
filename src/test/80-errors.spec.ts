@@ -1,4 +1,4 @@
-import { TestContext, after, before, describe, it } from 'node:test'
+import { type TestContext, after, before, describe, it } from 'node:test'
 
 import { FreeSwitchClient } from '../esl-lite.js'
 

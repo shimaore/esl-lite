@@ -30,24 +30,22 @@
   ],
   "exports": {
     "require": "./esl-lite.cjs",
-    "import": "./esl-lite.mjs",
-    "types": "./types/src/esl-lite.d.ts"
+    "import": "./esl-lite.mjs"
   },
   "devDependencies": {
-    "@eslint/js": "9.16.0",
-    "@tsconfig/node21": "21.0.3",
-    "@tsconfig/strictest": "2.0.5",
-    "@types/eslint__js": "8.42.3",
-    "@types/node": "22.10.1",
-    "@types/uuid": "10.0.0",
-    "esbuild": "0.24.0",
-    "eslint": "9.16.0",
-    "pino": "9.5.0",
-    "prettier": "3.4.2",
-    "typedoc": "0.27.4",
-    "typescript": "5.7.2",
-    "typescript-eslint": "8.18.0",
-    "uuid": "11.0.3"
+    "@eslint/js": "9.39.1",
+    "@tsconfig/node24": "24.0.3",
+    "@tsconfig/strictest": "2.0.8",
+    "@types/node": "24.10.1",
+    "@types/uuid": "11.0.0",
+    "esbuild": "0.27.0",
+    "eslint": "9.39.1",
+    "pino": "10.1.0",
+    "prettier": "3.6.2",
+    "typedoc": "0.28.14",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.48.0",
+    "uuid": "13.0.0"
   },
   "scripts": {
     "build": "node build.mjs",
@@ -55,7 +53,7 @@
     "lint": "yarn prepublishOnly && eslint --fix src/**/*.ts && yarn postlint",
     "postlint": "prettier -w . && typedoc 'src/*.ts'",
     "syntax": "tsc",
-    "test:live": "podman  build --ulimit nofile=1048576:1048576 -f test/Dockerfile ."
+    "test:live": "podman  build -f test/Dockerfile ."
   },
   "publishConfig": {
     "tag": "latest"
@@ -63,7 +61,7 @@
   "packageManager": "yarn@4.3.1",
   "dependencies": {
     "ulidx": "2.4.1",
-    "yocto-queue": "1.1.1"
+    "yocto-queue": "1.2.2"
   },
   "prettier": {
     "trailingComma": "es5",

@@ -2,7 +2,7 @@ import { describe, it } from 'node:test'
 import pino from 'pino'
 import { FreeSwitchClient } from '../src/client.js'
 
-const logger = pino.default({ name: 'test-reconnect', level: 'debug' })
+const logger = pino({ name: 'test-reconnect', level: 'debug' })
 
 describe('test-reconnect', () => {
   it('test-reconnect: should keep receiving HEARTBEAT', async () => {

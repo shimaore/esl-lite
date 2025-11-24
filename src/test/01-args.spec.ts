@@ -28,7 +28,7 @@ void describe('01-args', async () => {
     async function (t) {
       const lite = new EslLite({
         ...defaults,
-        logger: pino.default({ name: '01-args' }),
+        logger: pino({ name: '01-args' }),
       })
       const client = new FreeSwitchResponseProxy(
         lite,
@@ -54,7 +54,7 @@ void describe('01-args', async () => {
     async function (t) {
       const lite = new EslLite({
         ...defaults,
-        logger: pino.default({ name: '01-args' }),
+        logger: pino({ name: '01-args' }),
       })
       const client = new FreeSwitchResponseProxy(
         lite,

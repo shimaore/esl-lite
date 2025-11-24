@@ -53,7 +53,12 @@ export class EslLite {
             if (event instanceof Error) {
               yield event
             } else {
-              yield processRawEvent(event)
+              const ev = processRawEvent(event)
+              yield ev
+              /* Currently none of these errors are recoverable */
+              if (ev instanceof Error) {
+                break
+              }
             }
           }
 

@@ -50,9 +50,7 @@ export class FreeSwitchEventEmitter<
       this.registerEvent(event)
     }
 
-    if (this.__on[event] == null) {
-      this.__on[event] = new Set()
-    }
+    this.__on[event] ??= new Set()
     this.__on[event]?.add(handler)
     return this
   }
@@ -66,9 +64,7 @@ export class FreeSwitchEventEmitter<
       this.registerEvent(event)
     }
 
-    if (this.__once[event] == null) {
-      this.__once[event] = new Set()
-    }
+    this.__once[event] ??= new Set()
     this.__once[event]?.add(handler)
     return this
   }
