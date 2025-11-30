@@ -32,10 +32,14 @@ export const FreeSwitchParser = async function* (
   socket: AsyncIterable<Buffer>,
   logger: Logger
 ): AsyncGenerator<ProcessorInput | FreeSwitchParserNonEmptyBufferAtEndError> {
-  let bodyLength = 0
+  /** Current set of buffers to be processed (either headers or body). */
   const buffers: Buffer[] = []
+  /** Total number of bytes stored in `buffers`. */
   let buffersLength = 0
+
   let headers: Headers = new Headers()
+  /* Expected body-length */
+  let bodyLength = 0
   const theEmptyBuffer = Buffer.alloc(0)
 
   /* Read the socket using an async iterator */
@@ -44,40 +48,44 @@ export const FreeSwitchParser = async function* (
       let data = chunk
 
       while (data.length > 0) {
-        // ### Capture body
+        /* Capture body */
         while (bodyLength > 0 && data.length > 0) {
           /* When capturing the body, `buffers` contains the current data (text), `bodyLength` contains how many bytes are expected to be read in the body,
            * and `buffersLength` contains how many bytes have been receiveds so far.
            */
           buffers.push(data)
-          // As long as the whole body hasn't been received, keep adding the new data into the buffer.
+          /* As long as the whole body hasn't been received, keep adding the new data into the buffer. */
           if (buffersLength + data.length < bodyLength) {
             buffersLength += data.length
             data = theEmptyBuffer
             continue
           }
 
-          // Consume the body once it has been fully received.
-          const bodyBuffer = Buffer.concat(buffers, bodyLength)
-          const nextBuffer = data.subarray(bodyLength - buffersLength)
+          /* Consume the body once it has been fully received, up to bodyLength. */
+          const body = Buffer.concat(buffers, bodyLength)
 
-          // Process the content at each step.
-          yield { headers, body: bodyBuffer }
+          /* Process the content at each step. */
+          const content = { headers, body }
 
+          /* Push back the remaining of the received data for processing (as headers) */
+          data = data.subarray(bodyLength - buffersLength)
+
+          /* Reset */
           bodyLength = 0
           headers = new Headers()
 
-          // Re-parse whatever data was left after the body was fully consumed.
+          /* Re-parse whatever data was left after the body was fully consumed. */
           buffersLength = 0
           buffers.length = 0
-          data = nextBuffer
+
+          yield content
         }
 
-        // ### Capture headers
+        /* Capture headers */
         while (bodyLength === 0 && data.length > 0) {
-          // Capture headers, meaning up to the first blank line.
+          /* Capture headers, meaning up to the first blank line. */
           buffers.push(data)
-          // Wait until we reach the end of the header.
+          /* Wait until we reach the end of the header. */
           const headerEnd = data.indexOf('\n\n')
           if (headerEnd < 0) {
             buffersLength += data.length
@@ -85,28 +93,30 @@ export const FreeSwitchParser = async function* (
             continue
           }
 
-          // Consume the headers once they have been fully received.
+          /* Consume the headers once they have been fully received. */
           const headerBuffer = Buffer.concat(buffers, buffersLength + headerEnd)
-          const nextBuffer = data.subarray(headerEnd + 2)
+          /* Push back the remaining of the received data for processing (as headers) */
+          data = data.subarray(headerEnd + 2)
 
-          // Parse the header lines
+          /* Parse the header lines */
           headers = parseHeaders(headerBuffer)
-          // Figure out whether a body is expected
+          /* Figure out whether a body is expected */
           buffersLength = 0
           buffers.length = 0
 
           const contentLength = headers.contentLength
           if (contentLength != null) {
+            /* Save the Content-Length as expected body length */
             bodyLength = contentLength
-            // Parse the body (and eventually process)
-            data = nextBuffer
-          } else {
-            // Process the (header-only) content
-            yield { headers, body: Buffer.alloc(0) }
-            headers = new Headers()
-            // Re-parse whatever data was left after these headers were fully consumed.
-            data = nextBuffer
+            /* Parse the body (and eventually process) */
+            continue
           }
+
+          /* Process the (header-only) content */
+          const content = { headers, body: Buffer.alloc(0) }
+          headers = new Headers()
+          yield content
+          /* Re-parse whatever data was left after these headers were fully consumed. */
         }
       }
     } catch (err: unknown) {

@@ -18,4 +18,4 @@ COPY tsconfig.json /opt/
 RUN yarn prepublishOnly
 # RUN ulimit -a
 RUN node --test --abort-on-uncaught-exception --report-uncaught-exception --test-timeout=120000 --test-force-exit --test-reporter spec --test-concurrency 1 \
-  --test-name-pattern='.*'
+  --test-name-pattern='.*' build/src/test/*.js
