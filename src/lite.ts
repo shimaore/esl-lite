@@ -5,7 +5,11 @@ import {
 import { FreeSwitchSocket } from './socket.js'
 import { Socket } from 'node:net'
 import { FreeSwitchEventEmitter } from './event-emitter.js'
-import { ProcessedEvents, processRawEvent } from './raw-event.js'
+import {
+  FreeSwitchDisconnectNotice,
+  ProcessedEvents,
+  processRawEvent,
+} from './raw-event.js'
 import { type Logger } from 'pino'
 import { ulid } from 'ulidx'
 
@@ -55,8 +59,9 @@ export class EslLite {
             } else {
               const ev = processRawEvent(event)
               yield ev
-              /* Currently none of these errors are recoverable */
-              if (ev instanceof Error) {
+              /* Disconnect notice is a graceful close — let the socket drain naturally
+               * so the parser can emit NonEmptyBufferAtEnd if junk data follows. */
+              if (ev instanceof Error && !(ev instanceof FreeSwitchDisconnectNotice)) {
                 break
               }
             }
