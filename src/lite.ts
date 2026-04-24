@@ -61,7 +61,10 @@ export class EslLite {
               yield ev
               /* Disconnect notice is a graceful close — let the socket drain naturally
                * so the parser can emit NonEmptyBufferAtEnd if junk data follows. */
-              if (ev instanceof Error && !(ev instanceof FreeSwitchDisconnectNotice)) {
+              if (
+                ev instanceof Error &&
+                !(ev instanceof FreeSwitchDisconnectNotice)
+              ) {
                 break
               }
             }
