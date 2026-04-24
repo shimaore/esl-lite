@@ -57,6 +57,9 @@ export class FreeSwitchSocket {
         // Create a new socket connection
         const socket = new Socket()
 
+        const endHandler = (): void => {
+          socket.end()
+        }
         try {
           this.logger.debug(
             {
@@ -76,9 +79,7 @@ export class FreeSwitchSocket {
             socket.once('end', resolve)
           }).then(() => false)
 
-          this.ee.once('end', () => {
-            socket.end()
-          })
+          this.ee.once('end', endHandler)
 
           socket.connect(this.options)
           const success = await Promise.race([connected, ended])
@@ -120,6 +121,8 @@ export class FreeSwitchSocket {
           if (this.running) {
             await sleep(retry)
           }
+        } finally {
+          this.ee.removeListener('end', endHandler)
         }
       }
       this.logger.info({ running: this.running }, 'Disconnected')
