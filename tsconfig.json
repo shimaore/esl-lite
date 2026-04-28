@@ -13,7 +13,6 @@
     "allowSyntheticDefaultImports": true,
     "outDir": "build",
     "rootDir": ".",
-    "baseUrl": ".",
     "declaration": true,
     "declarationDir": "./types",
     "emitDeclarationOnly": false,

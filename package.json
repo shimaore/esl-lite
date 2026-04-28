@@ -29,23 +29,26 @@
     "./types/src/*.d.ts*"
   ],
   "exports": {
-    "require": "./esl-lite.cjs",
-    "import": "./esl-lite.mjs"
+    ".": {
+      "types": "./types/src/esl-lite.d.ts",
+      "require": "./esl-lite.cjs",
+      "import": "./esl-lite.mjs"
+    }
   },
   "devDependencies": {
-    "@eslint/js": "9.39.1",
-    "@tsconfig/node24": "24.0.3",
+    "@eslint/js": "10.0.1",
+    "@tsconfig/node24": "24.0.4",
     "@tsconfig/strictest": "2.0.8",
-    "@types/node": "24.10.1",
+    "@types/node": "24.12.2",
     "@types/uuid": "11.0.0",
-    "esbuild": "0.27.0",
-    "eslint": "9.39.1",
-    "pino": "10.1.0",
-    "prettier": "3.6.2",
-    "typedoc": "0.28.14",
-    "typescript": "5.9.3",
-    "typescript-eslint": "8.48.0",
-    "uuid": "13.0.0"
+    "esbuild": "0.28.0",
+    "eslint": "10.2.1",
+    "pino": "10.3.1",
+    "prettier": "3.8.3",
+    "typedoc": "0.28.19",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.59.1",
+    "uuid": "14.0.0"
   },
   "scripts": {
     "build": "node build.mjs",
