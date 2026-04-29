@@ -3,7 +3,6 @@ import {
   FreeSwitchParserNonEmptyBufferAtEndError,
 } from './parser.js'
 import { FreeSwitchSocket } from './socket.js'
-import { Socket } from 'node:net'
 import { FreeSwitchEventEmitter } from './event-emitter.js'
 import {
   FreeSwitchDisconnectNotice,
@@ -44,15 +43,43 @@ export class EslLite {
     return async function* (this: EslLite) {
       this.logger.debug({}, 'connect')
       for await (const socket of this.sockets.connect()) {
-        try {
-          const writer = (request: WriteRequest) => {
-            this._write(socket, request)
+        const pendingWrites: WriteRequest[] = []
+        let lastWrite: WriteRequest | undefined = undefined
+
+        const drain = () => {
+          if (lastWrite !== undefined) return
+          while (pendingWrites.length > 0) {
+            const req = pendingWrites.shift()
+            if (req === undefined) return
+            try {
+              const flushed = socket.write(req.buf)
+              if (!flushed) {
+                lastWrite = req
+                return
+              }
+              req.resolve(undefined)
+            } catch (err) {
+              req.resolve(new FreeSwitchWriteError(err))
+              return
+            }
           }
+        }
 
-          this.ee.on('write', writer)
+        socket.on('drain', () => {
+          lastWrite?.resolve(undefined)
+          lastWrite = undefined
+          drain()
+        })
 
-          this.logger.debug({}, 'connected')
+        const writer = (request: WriteRequest) => {
+          pendingWrites.push(request)
+          drain()
+        }
 
+        this.ee.on('write', writer)
+        this.logger.debug({}, 'connected')
+
+        try {
           for await (const event of FreeSwitchParser(socket, this.logger)) {
             if (event instanceof Error) {
               yield event
@@ -69,35 +96,23 @@ export class EslLite {
               }
             }
           }
-
-          this.ee.removeListener('write', writer)
-
-          socket.end()
         } catch (err) {
           this.logger.error({ err }, 'connect')
         }
+        this.ee.removeListener('write', writer)
+        try {
+          const closeErr = new FreeSwitchWriteError('socket closed')
+          const all = lastWrite !== undefined ? [lastWrite, ...pendingWrites.splice(0)] : pendingWrites.splice(0)
+          lastWrite = undefined
+          all.forEach((req) => req.resolve(closeErr))
+        } catch (err) {
+          this.logger.error({ err }, 'resolve')
+        }
+        socket.end()
       }
 
       this.logger.info({}, 'Application ended')
     }.bind(this)()
-  }
-
-  private _write(socket: Socket, request: WriteRequest) {
-    try {
-      const flushed = socket.write(request.buf)
-
-      /* Do not resolve until the request is actually flushed */
-      if (!flushed) {
-        this.logger.debug({}, 'Waiting for FreeSwitch to drain messages')
-        socket.once('drain', () => {
-          request.resolve(undefined)
-        })
-      } else {
-        request.resolve(undefined)
-      }
-    } catch (err) {
-      request.resolve(new FreeSwitchWriteError(err))
-    }
   }
 
   end() {

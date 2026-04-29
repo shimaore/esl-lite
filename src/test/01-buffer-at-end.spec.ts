@@ -35,7 +35,7 @@ Disconnected, filling your buffer with junk.
 `)
             } catch (err: unknown) {
               logger.error({ err })
-              reject(err as Error)
+              reject(err)
             }
             c.end()
           })()
@@ -63,7 +63,7 @@ Disconnected, filling your buffer with junk.
       })().then(resolve, reject)
     } catch (error: unknown) {
       logger.info(`buffer-at-end: unexpected failure ${error as Error}`)
-      reject(error as Error)
+      reject(error)
     }
   })
 })
