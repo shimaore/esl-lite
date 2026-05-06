@@ -121,7 +121,6 @@ export class FreeSwitchEventEmitter<
  */
 export const once = async <
   E extends string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   T extends Record<string, (...args: any[]) => void>,
   K extends keyof T,
 >(

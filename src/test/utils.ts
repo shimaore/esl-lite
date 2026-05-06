@@ -11,10 +11,11 @@ export const start = async (): Promise<void> => {
 }
 
 export const clientLogger = function (withDebug = true): pino.Logger {
+  const traceLevel = withDebug ? 'trace' : 'info'
   return pino({
     name: 'clientLogger',
-    level: withDebug ? 'trace' : 'info',
-  })
+    level: traceLevel,
+  }).child({ traceLevel })
 }
 
 export const serverLogger = function (): pino.Logger {

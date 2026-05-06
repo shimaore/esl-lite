@@ -76,9 +76,7 @@ void it(
 
     // --- Leak check ---
     // FreeSwitchSocket is private on EslLite, but we need it for the assertion.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
     const sockets = (lite as any).sockets as FreeSwitchSocket
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
     const socketEe = (sockets as any).ee as {
       __once: Record<string, Set<unknown> | undefined>
     }

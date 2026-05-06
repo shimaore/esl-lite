@@ -1,19 +1,19 @@
 import { it } from 'node:test'
 
-import { FreeSwitchClient } from '../esl-lite.js'
+import { FreeSwitchClient, FreeSwitchTimeoutError } from '../esl-lite.js'
 
 import { type Socket, createServer } from 'node:net'
 import { sleep } from '../sleep.js'
 import { clientLogger } from './utils.js'
 import assert from 'node:assert'
+import { type Logger } from 'pino'
 
 const clientPort = 5623
 
-void it('70 - should reconnect', { timeout: 30000 }, async () => {
-  let success = false
+const createService = (logger: Logger) => {
 
   let run = 0
-  const service = function (c: Socket): void {
+  const result = { success: false, service: function (c: Socket): void {
     run++
     logger.info(`Server run #${run} received connection`)
     c.on('error', function (error) {
@@ -58,11 +58,11 @@ Content-Length: 0
               logger.info('Server run #3 end')
               c.end()
               logger.info('Server run #3 close')
-              success = true
+              result.success = true
           }
         } catch (err) {
           logger.error({ err })
-          success = false
+          result.success = false
         }
       })()
     })
@@ -70,15 +70,21 @@ Content-Length: 0
     c.write('Content-Type: auth/request\n\n')
     logger.info(`Server run #${run} sent auth/request`)
   }
-  const spoof = createServer(service)
+  }
+  return result
+}
+
+void it('70 - should reconnect', { timeout: 30000 }, async () => {
+  const logger = clientLogger().child({ test: '70a' })
+
+  const s = createService(logger)
+  const spoof = createServer(s.service)
   spoof.listen(clientPort, function () {
     logger.info('Server ready')
   })
   spoof.on('close', function () {
     logger.info('Server received close event')
   })
-
-  const logger = clientLogger()
 
   const client = new FreeSwitchClient({
     host: '127.0.0.1',
@@ -87,6 +93,33 @@ Content-Length: 0
   })
   await sleep(4_000)
   client.end()
-  assert(success, 'Should be success')
+  assert(s.success, 'Should be success')
+  spoof.close()
+})
+
+void it('70 - should progress bgapi', { timeout: 10000 }, async () => {
+  const logger = clientLogger().child({ test: '70b' })
+
+  const s = createService(logger)
+  const spoof = createServer(s.service)
+  spoof.listen(clientPort+2, function () {
+    logger.info('71 - Server ready')
+  })
+  spoof.on('close', function () {
+    logger.info('71 - Server received close event')
+  })
+
+  const client = new FreeSwitchClient({
+    host: '127.0.0.1',
+    port: clientPort+2,
+    logger,
+  })
+  const outcome = await client.bgapi('test issue 4', 4_000)
+  client.end()
+  assert(s.success, 'Should be success')
+  assert(
+    outcome instanceof FreeSwitchTimeoutError,
+    'Should be FreeSwitchTimeoutError'
+  )
   spoof.close()
 })

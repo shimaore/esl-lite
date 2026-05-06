@@ -774,10 +774,16 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
     >((resolve) => {
       this.queue.enqueue({
         buf: buildCommand(command, commandHeaders, commandBody),
-        resolve,
+        resolve: (result) => {
+          clearTimeout(timer)
+          resolve(result)
+        },
         queued: performance.now(),
       })
       this.sendNextCommand()
+      const timer = setTimeout( () => {
+          resolve(new FreeSwitchTimeoutError(timeout, 'sendNextCommand'))
+      }, timeout)
     })
     this.logger.trace({ value }, 'send: enqueue done')
 
@@ -1216,7 +1222,7 @@ type CommandRequest = {
 }
 
 export class FreeSwitchApplicationEndedError extends Error {
-  override name = 'FreeSwitchParserNonEmptyBufferAtEndError' as const
+  override name = 'FreeSwitchApplicationEndedError' as const
   constructor() {
     super('Application closing')
   }

@@ -102,7 +102,10 @@ export class EslLite {
         this.ee.removeListener('write', writer)
         try {
           const closeErr = new FreeSwitchWriteError('socket closed')
-          const all = lastWrite !== undefined ? [lastWrite, ...pendingWrites.splice(0)] : pendingWrites.splice(0)
+          const all =
+            lastWrite !== undefined
+              ? [lastWrite, ...pendingWrites.splice(0)]
+              : pendingWrites.splice(0)
           lastWrite = undefined
           all.forEach((req) => req.resolve(closeErr))
         } catch (err) {
