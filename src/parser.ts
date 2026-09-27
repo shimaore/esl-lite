@@ -84,19 +84,33 @@ export const FreeSwitchParser = async function* (
         /* Capture headers */
         while (bodyLength === 0 && data.length > 0) {
           /* Capture headers, meaning up to the first blank line. */
-          buffers.push(data)
-          /* Wait until we reach the end of the header. */
-          const headerEnd = data.indexOf('\n\n')
-          if (headerEnd < 0) {
-            buffersLength += data.length
-            data = theEmptyBuffer
-            continue
+          /** Length of the headers, excluding the blank line. */
+          let headerLength: number
+          /** Number of bytes of `data` consumed by the headers and the blank line. */
+          let consumed: number
+          /* The blank line might be split between the previous chunk (ending with `\n`) and this one (starting with `\n`). */
+          const previous = buffers.at(-1)
+          if (previous?.at(-1) === 0x0a && data[0] === 0x0a) {
+            headerLength = buffersLength - 1
+            consumed = 1
+          } else {
+            /* Wait until we reach the end of the header. */
+            const headerEnd = data.indexOf('\n\n')
+            if (headerEnd < 0) {
+              buffers.push(data)
+              buffersLength += data.length
+              data = theEmptyBuffer
+              continue
+            }
+            headerLength = buffersLength + headerEnd
+            consumed = headerEnd + 2
           }
 
           /* Consume the headers once they have been fully received. */
-          const headerBuffer = Buffer.concat(buffers, buffersLength + headerEnd)
+          buffers.push(data)
+          const headerBuffer = Buffer.concat(buffers, headerLength)
           /* Push back the remaining of the received data for processing (as headers) */
-          data = data.subarray(headerEnd + 2)
+          data = data.subarray(consumed)
 
           /* Parse the header lines */
           headers = parseHeaders(headerBuffer)
