@@ -83,14 +83,22 @@ export const FreeSwitchParser = async function* (
 
         /* Capture headers */
         while (bodyLength === 0 && data.length > 0) {
+          const wasBlank = buffers.at(-1)?.at(-1) === 0x0a
+
           /* Capture headers, meaning up to the first blank line. */
           buffers.push(data)
+
           /* Wait until we reach the end of the header. */
-          const headerEnd = data.indexOf('\n\n')
-          if (headerEnd < 0) {
-            buffersLength += data.length
-            data = theEmptyBuffer
-            continue
+          let headerEnd
+          if( wasBlank && data[0] === 0x0a ) {
+            headerEnd = -1
+          } else {
+            headerEnd = data.indexOf('\n\n')
+            if (headerEnd < 0) {
+              buffersLength += data.length
+              data = theEmptyBuffer
+              continue
+            }
           }
 
           /* Consume the headers once they have been fully received. */
