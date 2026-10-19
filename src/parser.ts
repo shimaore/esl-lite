@@ -90,7 +90,7 @@ export const FreeSwitchParser = async function* (
 
           /* Wait until we reach the end of the header. */
           let headerEnd
-          if( wasBlank && data[0] === 0x0a ) {
+          if (wasBlank && data[0] === 0x0a) {
             headerEnd = -1
           } else {
             headerEnd = data.indexOf('\n\n')
@@ -113,7 +113,7 @@ export const FreeSwitchParser = async function* (
           buffers.length = 0
 
           const contentLength = headers.contentLength
-          if (contentLength != null) {
+          if (contentLength != null && contentLength > 0) {
             /* Save the Content-Length as expected body length */
             bodyLength = contentLength
             /* Parse the body (and eventually process) */
