@@ -781,8 +781,8 @@ export class FreeSwitchResponse extends FreeSwitchEventEmitter<
         queued: performance.now(),
       })
       this.sendNextCommand()
-      const timer = setTimeout( () => {
-          resolve(new FreeSwitchTimeoutError(timeout, 'sendNextCommand'))
+      const timer = setTimeout(() => {
+        resolve(new FreeSwitchTimeoutError(timeout, 'sendNextCommand'))
       }, timeout)
     })
     this.logger.trace({ value }, 'send: enqueue done')
