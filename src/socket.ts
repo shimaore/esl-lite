@@ -9,6 +9,14 @@ import { sleep } from './sleep.js'
 import { type Logger } from 'pino'
 import { FreeSwitchEventEmitter } from './event-emitter.js'
 import { ulid } from 'ulidx'
+
+/**
+ * How long `end()` waits for the remote end to finish closing before the
+ * socket is destroyed. `socket.end()` only sends our FIN; if the remote never
+ * answers with its own, the socket stays half-open until TCP keepalive gives up.
+ */
+const END_FORCE_CLOSE_MS = 2_000
+
 export class FreeSwitchSocket {
   private readonly options: {
     host: string
@@ -59,6 +67,15 @@ export class FreeSwitchSocket {
 
         const endHandler = (): void => {
           socket.end()
+          const forceClose = setTimeout(() => {
+            if (socket.destroyed) return
+            this.logger.info({}, 'Remote end did not close, destroying socket')
+            socket.destroy()
+          }, END_FORCE_CLOSE_MS)
+          forceClose.unref()
+          socket.once('close', () => {
+            clearTimeout(forceClose)
+          })
         }
         try {
           this.logger.debug(
@@ -77,6 +94,7 @@ export class FreeSwitchSocket {
           const ended = new Promise<unknown>((resolve, reject) => {
             socket.once('error', reject)
             socket.once('end', resolve)
+            socket.once('close', resolve)
           }).then(() => false)
 
           this.ee.once('end', endHandler)
